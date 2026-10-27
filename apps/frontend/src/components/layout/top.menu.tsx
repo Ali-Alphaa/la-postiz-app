@@ -82,6 +82,27 @@ export const useMenuItem = () => {
       path: '/analytics',
     },
     {
+      name: t('growth', 'Growth'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 20 20"
+          fill="none"
+        >
+          <path
+            d="M10 18.3337V10.8337M10 10.8337C10 8.5325 8.13452 6.66699 5.83333 6.66699H3.33333V7.50033C3.33333 9.80152 5.19881 11.667 7.5 11.667H10V10.8337ZM10 9.16699C10 6.8658 11.8655 5.00033 14.1667 5.00033H16.6667V5.83366C16.6667 8.13485 14.8012 10.0003 12.5 10.0003H10V9.16699Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/growth',
+    },
+    {
       name: t('media', 'Media'),
       icon: (
         <svg

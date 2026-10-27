@@ -58,6 +58,7 @@ import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validatio
 import { postContentPlainText } from '@gitroom/helpers/utils/sanitize.post.content';
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 import { countLength } from '@gitroom/helpers/utils/count.length';
+import { GrowthSettingsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.settings.service';
 
 type PostWithConditionals = Post & {
   integration?: Integration;
@@ -75,7 +76,8 @@ export class PostsService {
     private _shortLinkService: ShortLinkService,
     private _openaiService: OpenaiService,
     private _temporalService: TemporalService,
-    private _refreshIntegrationService: RefreshIntegrationService
+    private _refreshIntegrationService: RefreshIntegrationService,
+    private _growthSettingsService: GrowthSettingsService
   ) {}
 
   searchForMissingThreeHoursPosts() {
@@ -1171,12 +1173,19 @@ export class PostsService {
 
       const messages = (post.value || []).map((p) => p.content);
       // No point shortlinking links on platforms that strip them out anyway
+      // UTM parameters can't be added to a short link once it is created, so
+      // they are added right before (they are added again at publish time to
+      // the links that were not shortened)
       const updateContent =
         !body.shortLink || removeLinks
           ? messages
           : await this._shortLinkService.convertTextToShortLinks(
               orgId,
-              messages
+              await this._growthSettingsService.applyUtm(
+                orgId,
+                (post.settings as any)?.__type,
+                messages
+              )
             );
 
       post.value = (post.value || []).map((p, i) => ({

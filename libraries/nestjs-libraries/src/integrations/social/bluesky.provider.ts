@@ -3,6 +3,8 @@ import {
   PendingCheckResponse,
   PostDetails,
   PostResponse,
+  PublicPost,
+  PublicProfile,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
@@ -996,5 +998,63 @@ export class BlueskyProvider extends SocialAbstract implements SocialProvider {
 
   mentionFormat(idOrHandle: string, name: string) {
     return `@${idOrHandle}`;
+  }
+
+  // The public AppView serves profiles and feeds without authentication
+  private publicHandle(handle: string) {
+    return encodeURIComponent(handle.trim().replace(/^@/, ''));
+  }
+
+  async publicProfile(handle: string): Promise<PublicProfile | undefined> {
+    const response = await fetch(
+      `https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=${this.publicHandle(
+        handle
+      )}`,
+      { signal: AbortSignal.timeout(15000) }
+    );
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    const profile = await response.json();
+    return {
+      id: profile.did,
+      handle: profile.handle,
+      name: profile.displayName || profile.handle,
+      picture: profile.avatar || '',
+      url: `https://bsky.app/profile/${profile.handle}`,
+      followers: profile.followersCount || 0,
+      following: profile.followsCount || 0,
+      posts: profile.postsCount || 0,
+    };
+  }
+
+  async publicPosts(handle: string, limit: number): Promise<PublicPost[]> {
+    const response = await fetch(
+      `https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${this.publicHandle(
+        handle
+      )}&filter=posts_no_replies&limit=${Math.min(Math.max(limit, 1), 100)}`,
+      { signal: AbortSignal.timeout(15000) }
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const { feed } = await response.json();
+    return (feed || [])
+      .filter((item: any) => !item.reason && item.post?.record)
+      .map((item: any) => ({
+        id: item.post.uri,
+        url: `https://bsky.app/profile/${
+          item.post.author?.handle
+        }/post/${item.post.uri.split('/').pop()}`,
+        content: item.post.record.text || '',
+        publishedAt: item.post.record.createdAt || item.post.indexedAt,
+        likes: item.post.likeCount || 0,
+        reposts: (item.post.repostCount || 0) + (item.post.quoteCount || 0),
+        replies: item.post.replyCount || 0,
+      }));
   }
 }

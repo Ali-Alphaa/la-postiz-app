@@ -50,6 +50,11 @@ import { ErrorsRepository } from '@gitroom/nestjs-libraries/database/prisma/erro
 import { ErrorsService } from '@gitroom/nestjs-libraries/database/prisma/errors/errors.service';
 import { AdminStatsRepository } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.repository';
 import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/admin-stats/admin-stats.service';
+import { GrowthRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.repository';
+import { GrowthSettingsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.settings.service';
+import { GrowthService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.service';
+import { CompetitorsRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/competitors.repository';
+import { CompetitorsService } from '@gitroom/nestjs-libraries/database/prisma/growth/competitors.service';
 
 @Global()
 @Module({
@@ -109,6 +114,11 @@ import { AdminStatsService } from '@gitroom/nestjs-libraries/database/prisma/adm
     ErrorsService,
     AdminStatsRepository,
     AdminStatsService,
+    GrowthRepository,
+    GrowthSettingsService,
+    GrowthService,
+    CompetitorsRepository,
+    CompetitorsService,
   ],
   get exports() {
     return this.providers;

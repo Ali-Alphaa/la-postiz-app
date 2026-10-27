@@ -168,6 +168,29 @@ export type MediaContent = {
   thumbnailTimestamp?: number;
 };
 
+// Public data of any account on the platform (not only connected channels),
+// read without authentication - used by the competitor tracking
+export type PublicProfile = {
+  id: string;
+  handle: string;
+  name: string;
+  picture: string;
+  url: string;
+  followers: number;
+  following: number;
+  posts: number;
+};
+
+export type PublicPost = {
+  id: string;
+  url: string;
+  content: string;
+  publishedAt: string;
+  likes: number;
+  reposts: number;
+  replies: number;
+};
+
 export type FetchPageInformationResult = {
   id: string;
   name: string;
@@ -243,4 +266,6 @@ export interface SocialProvider
     accessToken: string,
     data: any
   ): Promise<FetchPageInformationResult>;
+  publicProfile?(handle: string): Promise<PublicProfile | undefined>; // Public profile of any account, without auth; undefined when not found
+  publicPosts?(handle: string, limit: number): Promise<PublicPost[]>; // Latest public posts (no replies / reposts) of any account, without auth
 }

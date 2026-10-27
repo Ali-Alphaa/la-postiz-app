@@ -45,6 +45,12 @@ model Organization {
   webhooks            Webhooks[]
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
+  growthSettings      GrowthSettings?
+  postEngagements     PostEngagement[]
+  recycleSettings     RecycleSettings[]
+  postRecycles        PostRecycle[]
+  abExperiments       AbExperiment[]
+  competitors         Competitor[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -396,6 +402,10 @@ model Integration {
   orderItems            OrderItems[]
   plugs                 Plugs[]
   posts                 Post[]
+  postEngagements       PostEngagement[]
+  recycleSettings       RecycleSettings?
+  postRecycles          PostRecycle[]
+  abExperiments         AbExperiment[]
 
   @@unique([organizationId, internalId])
   @@index([rootInternalId])
@@ -493,6 +503,10 @@ model Post {
   submittedForOrder          Orders?                   @relation(fields: [submittedForOrderId], references: [id])
   submittedForOrganization   Organization?             @relation("submittedForOrg", fields: [submittedForOrganizationId], references: [id])
   tags                       TagsPosts[]
+  engagement                 PostEngagement?
+  recycledAs                 PostRecycle[]             @relation("recycleSource")
+  recycledFrom               PostRecycle[]             @relation("recycleTarget")
+  abVariant                  AbVariant?
 
   @@index([group])
   @@index([batchId])
@@ -510,6 +524,164 @@ model Post {
   @@index([updatedAt])
   @@index([releaseURL])
   @@index([integrationId])
+}
+
+// Engagement of a published post, copied from the provider analytics by the
+// growth workflow, so the growth features don't hit the providers on every read
+model PostEngagement {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String
+  postId         String       @unique
+  publishDate    DateTime
+  engagement     Int          @default(0)
+  impressions    Int          @default(0)
+  metrics        String       @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  post           Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([integrationId])
+  @@index([updatedAt])
+}
+
+model GrowthSettings {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  utmEnabled     Boolean      @default(false)
+  utmSource      String       @default("{{provider}}")
+  utmMedium      String       @default("social")
+  utmCampaign    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+model RecycleSettings {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String       @unique
+  enabled        Boolean      @default(false)
+  minAgeDays     Int          @default(30)
+  minGapDays     Int          @default(90)
+  postsPerWeek   Int          @default(1)
+  percentile     Int          @default(80)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([enabled])
+}
+
+model PostRecycle {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String
+  sourcePostId   String
+  recycledPostId String
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  sourcePost     Post         @relation("recycleSource", fields: [sourcePostId], references: [id], onDelete: Cascade)
+  recycledPost   Post         @relation("recycleTarget", fields: [recycledPostId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([sourcePostId])
+  @@index([integrationId, createdAt])
+}
+
+model AbExperiment {
+  id              String             @id @default(uuid())
+  organizationId  String
+  integrationId   String
+  name            String
+  status          AbExperimentStatus @default(RUNNING)
+  evaluationHours Int                @default(48)
+  winnerVariantId String?
+  completedAt     DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime?
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration     Integration        @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  variants        AbVariant[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model AbVariant {
+  id           String       @id @default(uuid())
+  experimentId String
+  postId       String       @unique
+  label        String
+  engagement   Int?
+  impressions  Int?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  experiment   AbExperiment @relation(fields: [experimentId], references: [id], onDelete: Cascade)
+  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([experimentId])
+}
+
+model Competitor {
+  id             String               @id @default(uuid())
+  organizationId String
+  provider       String
+  handle         String
+  name           String?
+  picture        String?
+  profileUrl     String?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  deletedAt      DateTime?
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  snapshots      CompetitorSnapshot[]
+  posts          CompetitorPost[]
+
+  @@unique([organizationId, provider, handle])
+  @@index([deletedAt])
+  @@index([lastSyncedAt])
+}
+
+model CompetitorSnapshot {
+  id            String     @id @default(uuid())
+  competitorId  String
+  followers     Int        @default(0)
+  following     Int        @default(0)
+  postsCount    Int        @default(0)
+  avgEngagement Float      @default(0)
+  createdAt     DateTime   @default(now())
+  competitor    Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, createdAt])
+}
+
+model CompetitorPost {
+  id           String     @id @default(uuid())
+  competitorId String
+  externalId   String
+  url          String
+  content      String
+  publishedAt  DateTime
+  likes        Int        @default(0)
+  reposts      Int        @default(0)
+  replies      Int        @default(0)
+  engagement   Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@unique([competitorId, externalId])
+  @@index([engagement])
 }
 
 model Notifications {
@@ -1824,6 +1996,12 @@ enum ShortLinkPreference {
   ASK
   YES
   NO
+}
+
+enum AbExperimentStatus {
+  RUNNING
+  COMPLETED
+  CANCELED
 }
 
 enum AnnouncementColor {

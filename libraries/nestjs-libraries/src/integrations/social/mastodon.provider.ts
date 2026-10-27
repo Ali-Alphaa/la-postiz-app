@@ -3,8 +3,11 @@ import {
   PendingCheckResponse,
   PostDetails,
   PostResponse,
+  PublicPost,
+  PublicProfile,
   SocialProvider,
 } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { makeSecureId } from '@gitroom/nestjs-libraries/services/make.secure.id';
 import {
@@ -562,5 +565,97 @@ export class MastodonProvider extends SocialAbstract implements SocialProvider {
       process.env.MASTODON_URL || 'https://mastodon.social',
       postDetails
     );
+  }
+
+  // `user@instance` (or `@user@instance`); a bare `user` is looked up on the
+  // default instance. The instance comes from the user, so it is validated and
+  // requested through the SSRF-safe dispatcher.
+  private publicAccount(handle: string) {
+    const [username, instance] = handle.trim().replace(/^@/, '').split('@');
+    const host =
+      instance ||
+      new URL(process.env.MASTODON_URL || 'https://mastodon.social').host;
+    if (!username || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(host)) {
+      return undefined;
+    }
+
+    return { username, host };
+  }
+
+  private async publicLookup(handle: string) {
+    const account = this.publicAccount(handle);
+    if (!account) {
+      return undefined;
+    }
+
+    const response = await fetch(
+      `https://${account.host}/api/v1/accounts/lookup?acct=${encodeURIComponent(
+        account.username
+      )}`,
+      {
+        // @ts-ignore — undici option, not in lib.dom fetch types
+        dispatcher: getSsrfSafeDispatcher(),
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    if (!response.ok) {
+      return undefined;
+    }
+
+    return { ...account, profile: await response.json() };
+  }
+
+  async publicProfile(handle: string): Promise<PublicProfile | undefined> {
+    const account = await this.publicLookup(handle);
+    if (!account?.profile?.id) {
+      return undefined;
+    }
+
+    return {
+      id: account.profile.id,
+      handle: `${account.profile.username}@${account.host}`,
+      name: account.profile.display_name || account.profile.username,
+      picture: account.profile.avatar || '',
+      url: account.profile.url,
+      followers: account.profile.followers_count || 0,
+      following: account.profile.following_count || 0,
+      posts: account.profile.statuses_count || 0,
+    };
+  }
+
+  async publicPosts(handle: string, limit: number): Promise<PublicPost[]> {
+    const account = await this.publicLookup(handle);
+    if (!account?.profile?.id) {
+      return [];
+    }
+
+    const response = await fetch(
+      `https://${account.host}/api/v1/accounts/${
+        account.profile.id
+      }/statuses?exclude_replies=true&exclude_reblogs=true&limit=${Math.min(
+        Math.max(limit, 1),
+        40
+      )}`,
+      {
+        // @ts-ignore — undici option, not in lib.dom fetch types
+        dispatcher: getSsrfSafeDispatcher(),
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    return ((await response.json()) || []).map((status: any) => ({
+      id: status.id,
+      url: status.url || status.uri,
+      content: stripHtmlValidation('none', status.content || ''),
+      publishedAt: status.created_at,
+      likes: status.favourites_count || 0,
+      reposts: status.reblogs_count || 0,
+      replies: status.replies_count || 0,
+    }));
   }
 }
