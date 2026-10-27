@@ -24,6 +24,7 @@ import {
   postId as postIdSearchParam,
 } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
 import { SubscriptionService } from '@gitroom/nestjs-libraries/database/prisma/subscriptions/subscription.service';
+import { GrowthSettingsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.settings.service';
 import {
   setHeartbeatDetails,
   withHeartbeat,
@@ -104,7 +105,8 @@ export class PostActivity {
     private _refreshIntegrationService: RefreshIntegrationService,
     private _webhookService: WebhooksService,
     private _temporalService: TemporalService,
-    private _subscriptionService: SubscriptionService
+    private _subscriptionService: SubscriptionService,
+    private _growthSettingsService: GrowthSettingsService
   ) {}
 
   @ActivityMethod()
@@ -222,9 +224,9 @@ export class PostActivity {
           integration.providerIdentifier
         );
 
-        const newPosts = await this._postService.updateTags(
-          integration.organizationId,
-          posts
+        const newPosts = await this.withUtm(
+          integration,
+          await this._postService.updateTags(integration.organizationId, posts)
         );
 
         return getIntegration.comment(
@@ -328,6 +330,24 @@ export class PostActivity {
     }
   }
 
+  // Adds the organization's UTM parameters to the links (only to what is
+  // sent to the platform, the stored post is left as is). Never throws.
+  private async withUtm<T extends { content: string }>(
+    integration: Integration,
+    posts: T[]
+  ): Promise<T[]> {
+    const contents = await this._growthSettingsService.applyUtm(
+      integration.organizationId,
+      integration.providerIdentifier,
+      (posts || []).map((p) => p.content)
+    );
+
+    return (posts || []).map((p, index) => ({
+      ...p,
+      content: contents[index],
+    }));
+  }
+
   private async postSocialInternal(
     integration: Integration,
     posts: Post[],
@@ -369,9 +389,9 @@ export class PostActivity {
     );
 
     setHeartbeatDetails('update tags');
-    const newPosts = await this._postService.updateTags(
-      integration.organizationId,
-      posts
+    const newPosts = await this.withUtm(
+      integration,
+      await this._postService.updateTags(integration.organizationId, posts)
     );
 
     setHeartbeatDetails('resolve media');

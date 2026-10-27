@@ -29,8 +29,63 @@ const ClipsPrompt = z.object({
   ),
 });
 
+const HashtagsPrompt = z.object({
+  hashtags: z.array(z.string()),
+});
+
+const RewritePrompt = z.object({
+  post: z.string(),
+});
+
 @Injectable()
 export class OpenaiService {
+  isAvailable() {
+    return !!process.env.OPENAI_API_KEY;
+  }
+
+  async generateHashtags(content: string, platform: string, count = 8) {
+    const hashtags =
+      (
+        await openai.chat.completions.parse({
+          model: 'gpt-4.1',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an assistant that suggests hashtags for a social media post that will be published on ${platform}. Suggest up to ${count} relevant hashtags that real people follow, mixing popular and niche ones, in the language of the post. Return them without the # sign and without spaces, never repeat a hashtag that is already in the post.`,
+            },
+            {
+              role: 'user',
+              content,
+            },
+          ],
+          response_format: zodResponseFormat(HashtagsPrompt, 'hashtags'),
+        })
+      ).choices[0].message.parsed?.hashtags || [];
+
+    return hashtags;
+  }
+
+  async rewritePost(content: string) {
+    return (
+      (
+        await openai.chat.completions.parse({
+          model: 'gpt-4.1',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an assistant that takes a social media post written by someone else and writes an original post inspired by it: keep the idea, the structure and the hook style that made it work, but use completely different wording, never copy sentences, never mention the original author. Keep about the same length and the same language.`,
+            },
+            {
+              role: 'user',
+              content,
+            },
+          ],
+          response_format: zodResponseFormat(RewritePrompt, 'rewrite'),
+        })
+      ).choices[0].message.parsed?.post || ''
+    );
+  }
+
   // The model answers with line numbers and not times, so a clip can only
   // start and end where the transcript really has a boundary
   async pickClips(

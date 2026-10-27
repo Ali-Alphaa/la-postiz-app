@@ -18,6 +18,7 @@ import { Theme } from 'emoji-picker-react';
 import { BoldText } from '@gitroom/frontend/components/new-launch/bold.text';
 import { UText } from '@gitroom/frontend/components/new-launch/u.text';
 import { SignatureBox } from '@gitroom/frontend/components/signature';
+import { HashtagBox } from '@gitroom/frontend/components/new-launch/hashtag.box';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
   SelectedIntegrations,
@@ -1035,6 +1036,10 @@ export const Editor: FC<{
                     toolBar={
                       <div className="flex gap-[5px] mobile:gap-[4px]">
                         <SignatureBox editor={editorRef?.current?.editor} />
+                        <HashtagBox
+                          editor={editorRef?.current?.editor}
+                          text={valueWithoutHtml}
+                        />
                         {editorType !== 'none' && (
                           <>
                             <UText
