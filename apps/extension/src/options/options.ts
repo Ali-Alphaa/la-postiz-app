@@ -42,7 +42,10 @@ const save = async () => {
     return null;
   }
   if (!(await allow(settings))) {
-    show('Allow the extension to reach your Postiz domain to continue', 'error');
+    show(
+      'Allow the extension to reach your Postiz domain to continue',
+      'error'
+    );
     return null;
   }
   await saveSettings(settings);

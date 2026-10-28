@@ -8,7 +8,12 @@ const { document } = new JSDOM('<!doctype html><body></body>').window;
 
 // Simplified copies of the markup of x.com (2026): only the attributes the
 // parser relies on are kept
-const actions = (replies: string, reposts: string, likes: string, views?: string) => `
+const actions = (
+  replies: string,
+  reposts: string,
+  likes: string,
+  views?: string
+) => `
   <div role="group" aria-label="${replies} replies, ${reposts} reposts, ${likes} likes">
     <button data-testid="reply" aria-label="${replies} Replies. Reply"><span>${replies}</span></button>
     <button data-testid="retweet" aria-label="${reposts} reposts. Repost"><span>${reposts}</span></button>
@@ -20,7 +25,12 @@ const actions = (replies: string, reposts: string, likes: string, views?: string
     }
   </div>`;
 
-const userName = (name: string, handle: string, id: string, datetime: string) => `
+const userName = (
+  name: string,
+  handle: string,
+  id: string,
+  datetime: string
+) => `
   <div data-testid="User-Name">
     <div><a href="/${handle}" role="link"><div><span><span>${name}</span></span></div></a></div>
     <div>
@@ -59,7 +69,12 @@ describe('parseTweet', () => {
   it('reads a regular tweet', () => {
     const tweet = parseTweet(
       article(`
-        ${userName('Alice Trader', 'alice', '1850000000000000001', '2026-10-27T10:00:00.000Z')}
+        ${userName(
+          'Alice Trader',
+          'alice',
+          '1850000000000000001',
+          '2026-10-27T10:00:00.000Z'
+        )}
         <div data-testid="tweetText" lang="en"><span>Cut losers fast.</span><br><span>Let winners run </span><img alt="📈" src="x.svg"></div>
         <div data-testid="tweetPhoto"><img src="p.jpg"></div>
         ${actions('12', '1.2K', '4,567', '89,012')}

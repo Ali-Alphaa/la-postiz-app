@@ -113,7 +113,8 @@ const saveByHand = async (article: Element, button: HTMLButtonElement) => {
 
 const addSaveButton = (article: Element, tweet: ParsedTweet) => {
   const bar = Array.from(article.querySelectorAll('[role="group"]')).find(
-    (group) => group.querySelector('[data-testid="like"], [data-testid="unlike"]')
+    (group) =>
+      group.querySelector('[data-testid="like"], [data-testid="unlike"]')
   );
   if (!bar || bar.querySelector(`[${BUTTON_ATTRIBUTE}]`)) {
     return;
@@ -152,11 +153,13 @@ const scan = () => {
 
 const observer = new MutationObserver((mutations) => {
   // the save buttons we add are not a reason to read the page again
-  const ours = mutations.every((mutation) =>
-    Array.from(mutation.addedNodes).every(
-      (node) =>
-        node instanceof Element && node.hasAttribute(BUTTON_ATTRIBUTE)
-    ) && mutation.type === 'childList' && mutation.addedNodes.length > 0
+  const ours = mutations.every(
+    (mutation) =>
+      Array.from(mutation.addedNodes).every(
+        (node) => node instanceof Element && node.hasAttribute(BUTTON_ATTRIBUTE)
+      ) &&
+      mutation.type === 'childList' &&
+      mutation.addedNodes.length > 0
   );
   if (ours || scanTimer || stopped) {
     return;

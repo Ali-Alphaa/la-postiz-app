@@ -210,8 +210,12 @@ export const parseTweetUrl = (value: string) => {
     return null;
   }
 
-  const [handle, id] = match.length === 3 ? [match[1], match[2]] : [null, match[1]];
-  if (handle && ['i', 'home', 'search', 'explore'].includes(handle.toLowerCase())) {
+  const [handle, id] =
+    match.length === 3 ? [match[1], match[2]] : [null, match[1]];
+  if (
+    handle &&
+    ['i', 'home', 'search', 'explore'].includes(handle.toLowerCase())
+  ) {
     return null;
   }
 

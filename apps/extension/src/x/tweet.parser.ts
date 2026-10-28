@@ -30,7 +30,9 @@ const DIGIT_BLOCKS = [0x0660, 0x06f0, 0x0966, 0x09e6, 0xff10];
 const normalizeDigits = (value: string) =>
   value.replace(/[٠-٩۰-۹०-९০-৯０-９]/g, (char) => {
     const code = char.charCodeAt(0);
-    const block = DIGIT_BLOCKS.find((start) => code >= start && code <= start + 9)!;
+    const block = DIGIT_BLOCKS.find(
+      (start) => code >= start && code <= start + 9
+    )!;
     return String(code - block);
   });
 
@@ -39,13 +41,13 @@ const MULTIPLIERS: Record<string, number> = {
   k: 1e3,
   tsd: 1e3,
   mil: 1e3,
-  '千': 1e3,
-  '万': 1e4,
+  千: 1e3,
+  万: 1e4,
   m: 1e6,
   mio: 1e6,
   mn: 1e6,
   mln: 1e6,
-  '億': 1e8,
+  億: 1e8,
   b: 1e9,
   md: 1e9,
   mrd: 1e9,
@@ -148,9 +150,9 @@ export const parseTweet = (
   );
   const link = time?.closest('a[href*="/status/"]');
   const path = link?.getAttribute('href') || '';
-  const status = (path.startsWith('http') ? new URL(path).pathname : path).match(
-    STATUS_PATH
-  );
+  const status = (
+    path.startsWith('http') ? new URL(path).pathname : path
+  ).match(STATUS_PATH);
   if (!time || !status) {
     return null;
   }
@@ -168,7 +170,9 @@ export const parseTweet = (
   const textElement = own('[data-testid="tweetText"]');
   const text = textElement ? readText(textElement).trim() : '';
 
-  const hasVideo = !!own('[data-testid="videoPlayer"], [data-testid="videoComponent"], video');
+  const hasVideo = !!own(
+    '[data-testid="videoPlayer"], [data-testid="videoComponent"], video'
+  );
   const hasPhoto = !!own('[data-testid="tweetPhoto"]');
 
   const socialContext = (
@@ -198,7 +202,6 @@ export const parseTweet = (
     ),
     isRepost: /repost|retweet/.test(socialContext),
     isQuote: !!quote,
-    own:
-      !!ownHandle && handle.toLowerCase() === ownHandle.toLowerCase(),
+    own: !!ownHandle && handle.toLowerCase() === ownHandle.toLowerCase(),
   };
 };

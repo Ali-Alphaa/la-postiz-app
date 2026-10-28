@@ -2,10 +2,7 @@ import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/pris
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { XLibraryQueryDto } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
-import {
-  XLikeSample,
-  XVoiceSample,
-} from '@gitroom/helpers/utils/x.library';
+import { XLikeSample, XVoiceSample } from '@gitroom/helpers/utils/x.library';
 
 export interface XTweetValues {
   url: string;
@@ -169,7 +166,11 @@ export class XInspirationRepository {
     });
   }
 
-  createRepurpose(orgId: string, sourceTweetIds: string[], variations: string[][]) {
+  createRepurpose(
+    orgId: string,
+    sourceTweetIds: string[],
+    variations: string[][]
+  ) {
     return this._xRepurpose.model.xRepurpose.create({
       data: {
         organizationId: orgId,

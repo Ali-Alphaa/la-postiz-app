@@ -47,13 +47,20 @@ const RepurposePrompt = z.object({
       z.object({
         posts: z
           .array(z.string())
-          .describe('The posts of the variation, each one 280 characters or less'),
+          .describe(
+            'The posts of the variation, each one 280 characters or less'
+          ),
       })
     )
     .describe('Exactly 5 variations'),
 });
 
-export type AiStatus = 'ok' | 'unavailable' | 'refusal' | 'rate_limited' | 'error';
+export type AiStatus =
+  | 'ok'
+  | 'unavailable'
+  | 'refusal'
+  | 'rate_limited'
+  | 'error';
 export type AiResult<T> =
   | { status: 'ok'; data: T }
   | { status: Exclude<AiStatus, 'ok'> };
@@ -227,7 +234,10 @@ Base every point on what the posts really do (quote short patterns, not whole po
       `You write X (Twitter) posts for a creator, in their voice, inspired by a post that went viral for someone else.
 Follow the creator's style guide:
 <style_guide>
-${styleGuide.trim() || 'No style guide yet: write clear, direct and conversational posts.'}
+${
+  styleGuide.trim() ||
+  'No style guide yet: write clear, direct and conversational posts.'
+}
 </style_guide>
 Rules:
 - Write 3 alternative drafts with different angles or hooks.
@@ -287,11 +297,18 @@ Rules:
 - No hashtags, unless the source uses them.`;
 
     const content = tweets
-      .map((p, index) => `<source_${index + 1}>\n${p.text}\n</source_${index + 1}>`)
+      .map(
+        (p, index) => `<source_${index + 1}>\n${p.text}\n</source_${index + 1}>`
+      )
       .join('\n\n');
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await this.parse(RepurposePrompt, system, content, 'medium');
+      const result = await this.parse(
+        RepurposePrompt,
+        system,
+        content,
+        'medium'
+      );
       if (result.status !== 'ok') {
         return result;
       }
@@ -302,7 +319,9 @@ Rules:
       if (variations) {
         return { status: 'ok', data: variations };
       }
-      this._logger.warn('Anthropic returned less than 5 variations, asking again');
+      this._logger.warn(
+        'Anthropic returned less than 5 variations, asking again'
+      );
     }
 
     return { status: 'error' };

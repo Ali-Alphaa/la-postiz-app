@@ -34,4 +34,5 @@ export const publicApiUrl = (baseUrl: string) => {
 };
 
 // the pattern for chrome.permissions of the Postiz domain
-export const originPattern = (baseUrl: string) => `${new URL(baseUrl).origin}/*`;
+export const originPattern = (baseUrl: string) =>
+  `${new URL(baseUrl).origin}/*`;

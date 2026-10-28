@@ -73,9 +73,9 @@ describe('viralVerdict', () => {
         { id: 't', likes: 60 },
       ])
     ).toEqual({ status: 'viral', ratio: 3 });
-    expect(
-      viralVerdict({ id: 't', likes: 59 }, samples(10, 20, 30))
-    ).toEqual({ status: 'no' });
+    expect(viralVerdict({ id: 't', likes: 59 }, samples(10, 20, 30))).toEqual({
+      status: 'no',
+    });
   });
 
   it('does not divide by zero', () => {

@@ -233,11 +233,7 @@ export class XInspirationService {
         postedAt: p.postedAt || null,
       }))
     );
-    await this._xInspirationRepository.saveVoiceSamples(
-      orgId,
-      handle,
-      samples
-    );
+    await this._xInspirationRepository.saveVoiceSamples(orgId, handle, samples);
   }
 
   // the capture request doesn't wait for Claude
@@ -399,7 +395,11 @@ export class XInspirationService {
       { format }
     );
     if (result.status !== 'ok') {
-      return { available: true, drafts: [] as string[][], error: result.status };
+      return {
+        available: true,
+        drafts: [] as string[][],
+        error: result.status,
+      };
     }
 
     return { available: true, drafts: result.data, error: null };
@@ -435,7 +435,9 @@ export class XInspirationService {
         authorName: String(body?.author_name || '').slice(0, 100) || null,
       };
     } catch (err) {
-      this._logger.warn(`oEmbed failed for ${parsed.id}: ${(err as Error).message}`);
+      this._logger.warn(
+        `oEmbed failed for ${parsed.id}: ${(err as Error).message}`
+      );
       return null;
     }
   }
@@ -479,11 +481,19 @@ export class XInspirationService {
 
   async repurpose(orgId: string, body: XRepurposeDto) {
     if (!this._anthropicService.isAvailable()) {
-      return { available: false, id: null, variations: [] as string[][], error: null };
+      return {
+        available: false,
+        id: null,
+        variations: [] as string[][],
+        error: null,
+      };
     }
 
     const ids = [...new Set(body.tweetIds)];
-    const tweets = await this._xInspirationRepository.getTweetsByIds(orgId, ids);
+    const tweets = await this._xInspirationRepository.getTweetsByIds(
+      orgId,
+      ids
+    );
     if (tweets.length !== ids.length) {
       throw new NotFoundException('Tweet not found');
     }
@@ -524,7 +534,10 @@ export class XInspirationService {
   // Goes through the same path as the editor and the public API
   // (PostsService.createPost), so the post is published by the usual workflow
   async postRepurpose(orgId: string, id: string, body: XRepurposePostDto) {
-    const repurpose = await this._xInspirationRepository.getRepurpose(orgId, id);
+    const repurpose = await this._xInspirationRepository.getRepurpose(
+      orgId,
+      id
+    );
     if (!repurpose) {
       throw new NotFoundException('Variations not found');
     }
@@ -549,10 +562,7 @@ export class XInspirationService {
       throw new BadRequestException('Pick an X channel');
     }
 
-    const date =
-      body.type === 'now'
-        ? dayjs.utc()
-        : dayjs.utc(body.date);
+    const date = body.type === 'now' ? dayjs.utc() : dayjs.utc(body.date);
     if (body.type === 'schedule' && !date.isAfter(dayjs.utc())) {
       throw new BadRequestException('Pick a date in the future');
     }
@@ -561,8 +571,12 @@ export class XInspirationService {
     let lastSettings = {};
     try {
       lastSettings = JSON.parse(
-        (await this._growthRepository.getLastPostSettings(orgId, integration.id))
-          ?.settings || '{}'
+        (
+          await this._growthRepository.getLastPostSettings(
+            orgId,
+            integration.id
+          )
+        )?.settings || '{}'
       );
     } catch (err) {}
     const settings = {

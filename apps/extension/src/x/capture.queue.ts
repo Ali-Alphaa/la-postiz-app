@@ -46,7 +46,10 @@ export class CaptureQueue {
     let bytes = 0;
     for (const tweet of this.waiting.values()) {
       const size = JSON.stringify(tweet).length;
-      if (batch.length >= MAX_BATCH || (batch.length && bytes + size > MAX_BATCH_BYTES)) {
+      if (
+        batch.length >= MAX_BATCH ||
+        (batch.length && bytes + size > MAX_BATCH_BYTES)
+      ) {
         break;
       }
       batch.push(tweet);

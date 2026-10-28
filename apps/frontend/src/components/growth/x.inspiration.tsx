@@ -170,10 +170,7 @@ const SetupCard: FC = () => {
           )}
         </li>
         <li>
-          {t(
-            'x_setup_step_2',
-            'Copy your API key from Settings → Public API.'
-          )}
+          {t('x_setup_step_2', 'Copy your API key from Settings → Public API.')}
         </li>
         <li>
           {t(
@@ -510,7 +507,15 @@ const TweetCard: FC<{
   onRewrite: () => void;
   rewriting: boolean;
   onHide: () => void;
-}> = ({ tweet, selected, onSelect, onFilter, onRewrite, rewriting, onHide }) => {
+}> = ({
+  tweet,
+  selected,
+  onSelect,
+  onFilter,
+  onRewrite,
+  rewriting,
+  onHide,
+}) => {
   const t = useT();
   return (
     <GrowthCard
@@ -852,7 +857,9 @@ export const XInspiration: FC = () => {
             value={filters.niche}
             onChange={(e) => setFilter('niche', e.target.value as any)}
           >
-            <option value="on">{t('trading_markets', 'Trading & markets')}</option>
+            <option value="on">
+              {t('trading_markets', 'Trading & markets')}
+            </option>
             <option value="off">{t('off_niche', 'off-niche')}</option>
             <option value="all">{t('all', 'All')}</option>
           </Select>
@@ -891,7 +898,9 @@ export const XInspiration: FC = () => {
             value={filters.sort}
             onChange={(e) => setFilter('sort', e.target.value as any)}
           >
-            <option value="ratio">{t('times_above_usual', '× above usual')}</option>
+            <option value="ratio">
+              {t('times_above_usual', '× above usual')}
+            </option>
             <option value="likes">{t('likes', 'likes')}</option>
             <option value="recent">{t('recent', 'Recent')}</option>
           </Select>
