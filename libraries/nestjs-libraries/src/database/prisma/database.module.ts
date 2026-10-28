@@ -58,6 +58,7 @@ import { CompetitorsService } from '@gitroom/nestjs-libraries/database/prisma/gr
 import { XInspirationRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.repository';
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
+import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 
 @Global()
 @Module({
@@ -125,6 +126,7 @@ import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.
     AnthropicService,
     XInspirationRepository,
     XInspirationService,
+    XFetcherService,
   ],
   get exports() {
     return this.providers;

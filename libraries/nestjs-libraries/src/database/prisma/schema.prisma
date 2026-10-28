@@ -55,6 +55,7 @@ model Organization {
   xViralTweets        XViralTweet[]
   xVoiceProfile       XVoiceProfile?
   xRepurposes         XRepurpose[]
+  xFetcherUsages      XFetcherUsage[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -726,7 +727,8 @@ model XViralTweet {
   format         String?
   onNiche        Boolean?
   analyzedAt     DateTime?
-  // auto: captured because it was viral, manual: saved by the user
+  // auto: captured because it was viral, manual: saved by the user,
+  // fetch: collected with the X fetcher and saved by the user
   source         String       @default("auto")
   capturedAt     DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
@@ -764,6 +766,20 @@ model XRepurpose {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
+}
+
+// Requests the X fetcher made to x.com for an organization, per UTC day
+model XFetcherUsage {
+  id             String       @id @default(uuid())
+  organizationId String
+  // YYYY-MM-DD, UTC
+  day            String
+  count          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, day])
 }
 
 model Notifications {

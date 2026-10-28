@@ -32,7 +32,11 @@ import {
   InspirationQueryDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/competitor.dto';
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
+import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import {
+  XFetchSaveDto,
+  XFetchSearchDto,
+  XFetchUserDto,
   XLibraryQueryDto,
   XRepurposeDto,
   XRepurposePostDto,
@@ -48,7 +52,8 @@ export class GrowthController {
     private _growthService: GrowthService,
     private _growthSettingsService: GrowthSettingsService,
     private _competitorsService: CompetitorsService,
-    private _xInspirationService: XInspirationService
+    private _xInspirationService: XInspirationService,
+    private _xFetcherService: XFetcherService
   ) {}
 
   @Get('/settings')
@@ -290,5 +295,35 @@ export class GrowthController {
     @Body() body: XRepurposePostDto
   ) {
     return this._xInspirationService.postRepurpose(org.id, id, body);
+  }
+
+  // optional read-only X fetcher, off unless X_FETCHER_ENABLED
+  @Get('/x/fetcher')
+  getXFetcher(@GetOrgFromRequest() org: Organization) {
+    return this._xFetcherService.getStatus(org.id);
+  }
+
+  @Post('/x/fetch/user')
+  fetchXUser(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchUserDto
+  ) {
+    return this._xFetcherService.fetchUser(org.id, body);
+  }
+
+  @Post('/x/fetch/search')
+  fetchXSearch(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchSearchDto
+  ) {
+    return this._xFetcherService.fetchSearch(org.id, body);
+  }
+
+  @Post('/x/fetch/save')
+  saveXFetched(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchSaveDto
+  ) {
+    return this._xInspirationService.saveFetched(org.id, body.tweetIds);
   }
 }

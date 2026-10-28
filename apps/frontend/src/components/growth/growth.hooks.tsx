@@ -112,7 +112,7 @@ export interface XLibraryFilters {
   hookType: string;
   format: string;
   niche: 'on' | 'off' | 'all';
-  source: '' | 'auto' | 'manual';
+  source: '' | 'auto' | 'manual' | 'fetch';
   minRatio: string;
   sort: 'ratio' | 'likes' | 'recent';
 }
@@ -144,6 +144,14 @@ export const useXVoice = () => {
     return (await fetch('/growth/x/voice')).json();
   }, []);
   return useSWR('growth-x-voice', load);
+};
+
+export const useXFetcher = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/growth/x/fetcher')).json();
+  }, []);
+  return useSWR('growth-x-fetcher', load);
 };
 
 // the error message of a failed request, as the backend sends it

@@ -163,8 +163,8 @@ export class XLibraryQueryDto {
   minRatio?: number;
 
   @IsOptional()
-  @IsIn(['auto', 'manual'])
-  source?: 'auto' | 'manual';
+  @IsIn(['auto', 'manual', 'fetch'])
+  source?: 'auto' | 'manual' | 'fetch';
 
   @IsOptional()
   @IsIn(['ratio', 'likes', 'recent'])
@@ -237,6 +237,55 @@ export class XRepurposePostDto {
   @ValidateIf((o) => o.type === 'schedule')
   @IsDateString()
   date?: string;
+}
+
+// the X fetcher (optional, see x-fetcher/NOTICE.md)
+export class XFetchUserDto {
+  @IsString()
+  @IsDefined()
+  @Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().replace(/^@/, '') : value
+  )
+  @Matches(HANDLE)
+  handle: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number;
+
+  @IsBoolean()
+  @IsOptional()
+  includeReplies?: boolean;
+}
+
+export class XFetchSearchDto {
+  @IsString()
+  @IsDefined()
+  @MaxLength(300)
+  query: string;
+
+  @IsIn(['latest', 'top'])
+  mode: 'latest' | 'top';
+
+  @IsInt()
+  @IsOptional()
+  @Min(0)
+  @Max(10000000)
+  minLikes?: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit: number;
+}
+
+export class XFetchSaveDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @Matches(/^\d{1,30}$/, { each: true })
+  tweetIds: string[];
 }
 
 export type XHookType = (typeof X_HOOK_TYPES)[number];

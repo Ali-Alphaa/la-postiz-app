@@ -48,7 +48,8 @@ export class XInspirationRepository {
     private _xAuthorBaseline: PrismaRepository<'xAuthorBaseline'>,
     private _xViralTweet: PrismaRepository<'xViralTweet'>,
     private _xVoiceProfile: PrismaRepository<'xVoiceProfile'>,
-    private _xRepurpose: PrismaRepository<'xRepurpose'>
+    private _xRepurpose: PrismaRepository<'xRepurpose'>,
+    private _xFetcherUsage: PrismaRepository<'xFetcherUsage'>
   ) {}
 
   getBaselines(orgId: string, handles: string[]) {
@@ -104,7 +105,7 @@ export class XInspirationRepository {
     tweetId: string,
     tweet: XTweetValues,
     ratio: number,
-    source: 'auto' | 'manual'
+    source: 'auto' | 'manual' | 'fetch'
   ) {
     const values = {
       url: tweet.url,
@@ -115,9 +116,8 @@ export class XInspirationRepository {
       // a manual save of an author that is not known yet has no ratio
       ...(ratio ? { ratio } : {}),
       ...this.counts(tweet),
-      ...(source === 'manual'
-        ? { source, deletedAt: null as Date | null }
-        : {}),
+      // saved by the user: brought back if it was hidden
+      ...(source !== 'auto' ? { source, deletedAt: null as Date | null } : {}),
     };
 
     return this._xViralTweet.model.xViralTweet.upsert({
@@ -372,5 +372,28 @@ export class XInspirationRepository {
       create: { organizationId: orgId, ...values },
       select: { id: true },
     });
+  }
+
+  // atomic: the count after this request
+  async incrementFetcherUsage(orgId: string, day: string) {
+    return (
+      await this._xFetcherUsage.model.xFetcherUsage.upsert({
+        where: { organizationId_day: { organizationId: orgId, day } },
+        update: { count: { increment: 1 } },
+        create: { organizationId: orgId, day, count: 1 },
+        select: { count: true },
+      })
+    ).count;
+  }
+
+  async getFetcherUsage(orgId: string, day: string) {
+    return (
+      (
+        await this._xFetcherUsage.model.xFetcherUsage.findUnique({
+          where: { organizationId_day: { organizationId: orgId, day } },
+          select: { count: true },
+        })
+      )?.count || 0
+    );
   }
 }

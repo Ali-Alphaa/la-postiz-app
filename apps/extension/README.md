@@ -55,3 +55,32 @@ pnpm --filter ./apps/extension run test
 
 The tweets are sent to `POST <backend>/public/v1/x/capture` with the API key
 in the `Authorization` header, at most every ~10 seconds.
+
+## Extension or X fetcher?
+
+Postiz can also collect tweets from the server, without the extension: the
+optional **X fetcher** (Growth → X Inspiration → Collect from X) reads the
+public tweets of an account, or the results of a search, through x.com's web
+API. It is read-only and off by default.
+
+| | Browser extension | X fetcher |
+|---|---|---|
+| Reads | the tweets on your screen while you browse | an account's recent tweets or a search, on demand |
+| Account | your own browser session, nothing is sent to X | none (guest mode) or a **spare** account's cookies |
+| Risk | lowest: X sees normal browsing | unofficial access from the server: X may block it or the spare account |
+| Setup | load the extension, paste the API key | environment variables on the backend |
+
+Enable the fetcher on the backend:
+
+```bash
+X_FETCHER_ENABLED=true
+X_FETCHER_MODE=guest            # or cookies
+X_FETCHER_AUTH_TOKEN=...        # cookies mode only: auth_token cookie of a SPARE account
+X_FETCHER_CT0=...               # cookies mode only: ct0 cookie of the same account
+X_FETCHER_DAILY_LIMIT=150       # x.com requests per organization per UTC day
+```
+
+Never use the cookies of your main X account. The fetcher spaces its
+requests by at least one second, times out after ten seconds, and stops at
+the daily limit. Its code is partly adapted from XActions (Apache-2.0), see
+`libraries/nestjs-libraries/src/x-fetcher/NOTICE.md`.

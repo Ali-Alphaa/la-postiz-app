@@ -29,6 +29,7 @@ import {
   GrowthSection,
 } from '@gitroom/frontend/components/growth/channel.select';
 import { textToHtml } from '@gitroom/frontend/components/growth/ab.tests';
+import { XCollect } from '@gitroom/frontend/components/growth/x.collect';
 
 const X_MAX_CHARACTERS = 280;
 const MAX_REPURPOSE = 10;
@@ -550,9 +551,11 @@ const TweetCard: FC<{
             })}
           </span>
         ) : null}
-        {tweet.source === 'manual' && (
+        {tweet.source !== 'auto' && (
           <span className="text-[12px] px-[8px] py-[2px] rounded-full border border-newTableBorder whitespace-nowrap">
-            {t('saved_by_me', 'Saved by me')}
+            {tweet.source === 'fetch'
+              ? t('collected', 'Collected')
+              : t('saved_by_me', 'Saved by me')}
           </span>
         )}
         <a
@@ -786,6 +789,7 @@ export const XInspiration: FC = () => {
         />
       )}
       <AddTweet onSaved={reload} />
+      <XCollect onSaved={reload} />
       <GrowthCard className="flex gap-[12px] items-end flex-wrap">
         <div className="w-[220px] mobile:w-full">
           <Input
@@ -876,6 +880,7 @@ export const XInspiration: FC = () => {
             <option value="">{t('all', 'All')}</option>
             <option value="auto">{t('auto_captured', 'Auto-captured')}</option>
             <option value="manual">{t('saved_by_me', 'Saved by me')}</option>
+            <option value="fetch">{t('collected', 'Collected')}</option>
           </Select>
         </div>
         <div className="w-[120px] mobile:w-full">

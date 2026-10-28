@@ -12,6 +12,7 @@ import { GrowthRepository } from '@gitroom/nestjs-libraries/database/prisma/grow
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
+import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import {
   XCaptureDto,
   XCapturedTweetDto,
@@ -86,7 +87,8 @@ export class XInspirationService {
     private _anthropicService: AnthropicService,
     private _growthRepository: GrowthRepository,
     private _postsService: PostsService,
-    private _integrationService: IntegrationService
+    private _integrationService: IntegrationService,
+    private _xFetcherService: XFetcherService
   ) {}
 
   async capture(orgId: string, body: XCaptureDto) {
@@ -450,6 +452,21 @@ export class XInspirationService {
       );
     }
 
+    // with the X fetcher on, the real counts (and the ratio when the author
+    // is known); oEmbed otherwise or when it fails
+    const fetched = await this._xFetcherService.lookupTweet(orgId, parsed.id);
+    if (fetched) {
+      const { id } = await this._xInspirationRepository.upsertViralTweet(
+        orgId,
+        fetched.id,
+        fetched,
+        fetched.ratio || 0,
+        'manual'
+      );
+      this.analyzeInBackground(orgId);
+      return { id, fromX: true, counts: true };
+    }
+
     const fromX = await this.readTweet(parsed);
     const text = body.text?.trim();
     if (!fromX && (!text || !parsed.handle)) {
@@ -476,7 +493,37 @@ export class XInspirationService {
     );
     this.analyzeInBackground(orgId);
 
-    return { id, fromX: !!fromX };
+    return { id, fromX: !!fromX, counts: false };
+  }
+
+  // the tweets the user picked among the ones the X fetcher collected
+  async saveFetched(orgId: string, tweetIds: string[]) {
+    const tweets = await this._xFetcherService.fetchedTweets(orgId, tweetIds);
+    const inLibrary = new Set(
+      await this._xInspirationRepository.getLibraryTweetIds(
+        orgId,
+        tweets.map((p) => p.id)
+      )
+    );
+
+    let saved = 0;
+    for (const tweet of tweets) {
+      await this._xInspirationRepository.upsertViralTweet(
+        orgId,
+        tweet.id,
+        tweet,
+        tweet.ratio || 0,
+        'fetch'
+      );
+      if (!inLibrary.has(tweet.id)) {
+        saved++;
+      }
+    }
+    if (saved) {
+      this.analyzeInBackground(orgId);
+    }
+
+    return { saved, skipped: tweetIds.length - tweets.length };
   }
 
   async repurpose(orgId: string, body: XRepurposeDto) {
