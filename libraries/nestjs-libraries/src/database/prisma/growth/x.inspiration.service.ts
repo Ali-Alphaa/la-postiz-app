@@ -4,22 +4,37 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
 import { XInspirationRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.repository';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
+import { GrowthRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.repository';
+import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
+import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
+import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import {
   XCaptureDto,
   XCapturedTweetDto,
   XLibraryQueryDto,
+  XRepurposeDto,
+  XRepurposePostDto,
+  XSaveUrlDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
 import {
   bestVoiceSamples,
   evaluateAuthor,
+  likesRatio,
   mergeVoiceSamples,
+  oembedHtmlToTweet,
+  parseTweetUrl,
   XLikeSample,
   XVoiceSample,
 } from '@gitroom/helpers/utils/x.library';
 
+dayjs.extend(utc);
+
 const ANALYZE_BATCH = 20;
+const OEMBED_TIMEOUT = 8000;
 const ANALYZE_MAX_BATCHES = 5;
 const MIN_VOICE_SAMPLES = 5;
 
@@ -40,6 +55,19 @@ const pendingPayload = (tweet: XCapturedTweetDto) => ({
 
 type PendingTweet = ReturnType<typeof pendingPayload>;
 
+// the editor keeps a post as html paragraphs
+const textToHtml = (text: string) =>
+  text
+    .split('\n')
+    .map(
+      (line) =>
+        `<p>${line
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')}</p>`
+    )
+    .join('');
+
 // midnight of the browser of the user, in UTC
 const startOfToday = (utcOffset = 0) => {
   const local = new Date(Date.now() - utcOffset * 60000);
@@ -55,7 +83,10 @@ export class XInspirationService {
 
   constructor(
     private _xInspirationRepository: XInspirationRepository,
-    private _anthropicService: AnthropicService
+    private _anthropicService: AnthropicService,
+    private _growthRepository: GrowthRepository,
+    private _postsService: PostsService,
+    private _integrationService: IntegrationService
   ) {}
 
   async capture(orgId: string, body: XCaptureDto) {
@@ -99,6 +130,7 @@ export class XInspirationService {
     );
 
     let saved = 0;
+    const samplesOf = new Map<string, XLikeSample[]>();
     for (const [handle, list] of byAuthor) {
       const baseline = baselines.get(handle);
       const result = evaluateAuthor<PendingTweet>(
@@ -108,6 +140,7 @@ export class XInspirationService {
         },
         list.map(pendingPayload)
       );
+      samplesOf.set(handle, result.samples);
 
       await this._xInspirationRepository.saveBaseline(
         orgId,
@@ -123,16 +156,22 @@ export class XInspirationService {
           orgId,
           tweet.id,
           tweet,
-          ratio
+          ratio,
+          list.some((p) => p.id === tweet.id && p.manual) ? 'manual' : 'auto'
         );
         if (!inLibrary.has(tweet.id)) {
+          inLibrary.add(tweet.id);
           saved++;
         }
       }
 
       // fresher counts of a tweet that was saved before
       for (const tweet of list) {
-        if (inLibrary.has(tweet.id) && !viralIds.has(tweet.id)) {
+        if (
+          inLibrary.has(tweet.id) &&
+          !viralIds.has(tweet.id) &&
+          !tweet.manual
+        ) {
           await this._xInspirationRepository.updateTweetCounts(
             orgId,
             tweet.id,
@@ -142,12 +181,36 @@ export class XInspirationService {
       }
     }
 
+    // saved with the button of the extension: kept whatever its likes, the
+    // user's own tweets included
+    const manual: string[] = [];
+    for (const tweet of tweets.filter((p) => p.manual)) {
+      if (!manual.includes(tweet.id)) {
+        await this._xInspirationRepository.upsertViralTweet(
+          orgId,
+          tweet.id,
+          pendingPayload(tweet),
+          likesRatio(
+            tweet,
+            samplesOf.get(tweet.authorHandle.toLowerCase()) || []
+          ),
+          'manual'
+        );
+        if (!inLibrary.has(tweet.id)) {
+          inLibrary.add(tweet.id);
+          saved++;
+        }
+      }
+      manual.push(tweet.id);
+    }
+
     if (saved) {
       this.analyzeInBackground(orgId);
     }
 
     return {
       saved,
+      manual,
       savedToday: await this._xInspirationRepository.countSavedSince(
         orgId,
         startOfToday(body.utcOffset)
@@ -340,5 +403,226 @@ export class XInspirationService {
     }
 
     return { available: true, drafts: result.data, error: null };
+  }
+
+  // The free oEmbed endpoint of X (no API key, no cost). Only the id and the
+  // handle of the pasted link are used, the host is fixed.
+  private async readTweet(parsed: { id: string; handle: string | null }) {
+    try {
+      const response = await fetch(
+        `https://publish.twitter.com/oembed?url=${encodeURIComponent(
+          `https://twitter.com/${parsed.handle || 'i'}/status/${parsed.id}`
+        )}&omit_script=true&dnt=true`,
+        { signal: AbortSignal.timeout(OEMBED_TIMEOUT), redirect: 'error' }
+      );
+      if (!response.ok) {
+        return null;
+      }
+
+      const body = await response.json();
+      const handle =
+        String(body?.author_url || '').match(
+          /^https:\/\/(?:twitter|x)\.com\/([A-Za-z0-9_]{1,15})$/
+        )?.[1] || parsed.handle;
+      const tweet = oembedHtmlToTweet(String(body?.html || ''));
+      if (!handle || !tweet.text) {
+        return null;
+      }
+
+      return {
+        ...tweet,
+        authorHandle: handle,
+        authorName: String(body?.author_name || '').slice(0, 100) || null,
+      };
+    } catch (err) {
+      this._logger.warn(`oEmbed failed for ${parsed.id}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  async saveFromUrl(orgId: string, body: XSaveUrlDto) {
+    const parsed = parseTweetUrl(body.url);
+    if (!parsed) {
+      throw new BadRequestException(
+        'This is not a link to a tweet (https://x.com/user/status/123)'
+      );
+    }
+
+    const fromX = await this.readTweet(parsed);
+    const text = body.text?.trim();
+    if (!fromX && (!text || !parsed.handle)) {
+      throw new BadRequestException(
+        'X did not answer for this tweet, paste its text and try again'
+      );
+    }
+
+    const tweet = fromX || {
+      text: text!,
+      authorHandle: parsed.handle!,
+      authorName: null,
+      mediaType: 'none' as const,
+      postedAt: null,
+    };
+
+    const { id } = await this._xInspirationRepository.upsertLinkedTweet(
+      orgId,
+      parsed.id,
+      {
+        ...tweet,
+        url: `https://x.com/${tweet.authorHandle}/status/${parsed.id}`,
+      }
+    );
+    this.analyzeInBackground(orgId);
+
+    return { id, fromX: !!fromX };
+  }
+
+  async repurpose(orgId: string, body: XRepurposeDto) {
+    if (!this._anthropicService.isAvailable()) {
+      return { available: false, id: null, variations: [] as string[][], error: null };
+    }
+
+    const ids = [...new Set(body.tweetIds)];
+    const tweets = await this._xInspirationRepository.getTweetsByIds(orgId, ids);
+    if (tweets.length !== ids.length) {
+      throw new NotFoundException('Tweet not found');
+    }
+
+    let styleGuide: string | undefined;
+    if (body.useMyVoice) {
+      styleGuide =
+        (await this._xInspirationRepository.getVoiceProfile(orgId))
+          ?.styleGuide || '';
+      if (!styleGuide.trim()) {
+        throw new BadRequestException(
+          'Write or generate your style guide in "My voice" first'
+        );
+      }
+    }
+
+    const result = await this._anthropicService.repurposeTweets(
+      ids.map((id) => tweets.find((p) => p.id === id)!),
+      { format: body.format, styleGuide }
+    );
+    if (result.status !== 'ok') {
+      return {
+        available: true,
+        id: null,
+        variations: [] as string[][],
+        error: result.status,
+      };
+    }
+
+    const { id } = await this._xInspirationRepository.createRepurpose(
+      orgId,
+      ids,
+      result.data
+    );
+    return { available: true, id, variations: result.data, error: null };
+  }
+
+  // Goes through the same path as the editor and the public API
+  // (PostsService.createPost), so the post is published by the usual workflow
+  async postRepurpose(orgId: string, id: string, body: XRepurposePostDto) {
+    const repurpose = await this._xInspirationRepository.getRepurpose(orgId, id);
+    if (!repurpose) {
+      throw new NotFoundException('Variations not found');
+    }
+    const variations = repurpose.variations as unknown as string[][];
+    if (body.index >= variations.length) {
+      throw new BadRequestException('Variation not found');
+    }
+
+    const posts = body.posts.map((p) => p.trim()).filter((p) => p);
+    if (!posts.length) {
+      throw new BadRequestException('The variation is empty');
+    }
+
+    const integration = await this._integrationService.getIntegrationById(
+      orgId,
+      body.integrationId
+    );
+    if (!integration || integration.deletedAt || integration.disabled) {
+      throw new NotFoundException('Channel not found');
+    }
+    if (integration.providerIdentifier !== 'x') {
+      throw new BadRequestException('Pick an X channel');
+    }
+
+    const date =
+      body.type === 'now'
+        ? dayjs.utc()
+        : dayjs.utc(body.date);
+    if (body.type === 'schedule' && !date.isAfter(dayjs.utc())) {
+      throw new BadRequestException('Pick a date in the future');
+    }
+
+    // the settings of the last post of the channel, like the A/B tests
+    let lastSettings = {};
+    try {
+      lastSettings = JSON.parse(
+        (await this._growthRepository.getLastPostSettings(orgId, integration.id))
+          ?.settings || '{}'
+      );
+    } catch (err) {}
+    const settings = {
+      who_can_reply_post: 'everyone',
+      ...lastSettings,
+      __type: integration.providerIdentifier,
+    };
+    const value = posts.map((p) => ({
+      content: textToHtml(p),
+      delay: 0,
+      image: [] as any[],
+    }));
+
+    const [validation] = await this._postsService.validatePosts(orgId, [
+      { integration: { id: integration.id }, settings, value },
+    ]);
+    if (!validation.valid) {
+      throw new BadRequestException(
+        validation.settingsError || 'Please check the settings of this channel'
+      );
+    }
+    if (validation.errors !== true) {
+      throw new BadRequestException(validation.errors);
+    }
+    if (validation.tooLong) {
+      throw new BadRequestException(
+        `The maximum characters is ${validation.maximumCharacters}`
+      );
+    }
+
+    const [created] = await this._postsService.createPost(
+      orgId,
+      {
+        date: date.format('YYYY-MM-DDTHH:mm:ss') + 'Z',
+        type: body.type,
+        shortLink: false,
+        tags: [],
+        posts: [
+          {
+            integration: { id: integration.id },
+            group: makeId(10),
+            settings,
+            value,
+          },
+        ],
+      } as any,
+      'WEB'
+    );
+    if (!created?.postId) {
+      throw new BadRequestException('The post could not be created');
+    }
+
+    await this._xInspirationRepository.setRepurposePost(
+      orgId,
+      id,
+      body.index,
+      variations.map((p, index) => (index === body.index ? posts : p)),
+      created.postId
+    );
+
+    return { postId: created.postId, date: date.toISOString() };
   }
 }

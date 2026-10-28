@@ -41,6 +41,7 @@ const tweetSelect = {
   format: true,
   onNiche: true,
   analyzedAt: true,
+  source: true,
   capturedAt: true,
 } satisfies Prisma.XViralTweetSelect;
 
@@ -49,7 +50,8 @@ export class XInspirationRepository {
   constructor(
     private _xAuthorBaseline: PrismaRepository<'xAuthorBaseline'>,
     private _xViralTweet: PrismaRepository<'xViralTweet'>,
-    private _xVoiceProfile: PrismaRepository<'xVoiceProfile'>
+    private _xVoiceProfile: PrismaRepository<'xVoiceProfile'>,
+    private _xRepurpose: PrismaRepository<'xRepurpose'>
   ) {}
 
   getBaselines(orgId: string, handles: string[]) {
@@ -98,12 +100,14 @@ export class XInspirationRepository {
     };
   }
 
-  // a tweet the user hid (deletedAt) stays hidden, its analysis is kept
+  // an automatic save never brings back a tweet the user hid (deletedAt),
+  // a manual save does. The analysis is kept.
   upsertViralTweet(
     orgId: string,
     tweetId: string,
     tweet: XTweetValues,
-    ratio: number
+    ratio: number,
+    source: 'auto' | 'manual'
   ) {
     const values = {
       url: tweet.url,
@@ -111,8 +115,12 @@ export class XInspirationRepository {
       authorName: tweet.authorName || null,
       text: tweet.text,
       mediaType: tweet.mediaType,
-      ratio,
+      // a manual save of an author that is not known yet has no ratio
+      ...(ratio ? { ratio } : {}),
       ...this.counts(tweet),
+      ...(source === 'manual'
+        ? { source, deletedAt: null as Date | null }
+        : {}),
     };
 
     return this._xViralTweet.model.xViralTweet.upsert({
@@ -121,10 +129,79 @@ export class XInspirationRepository {
       create: {
         organizationId: orgId,
         tweetId,
+        source,
         postedAt: tweet.postedAt ? new Date(tweet.postedAt) : null,
         ...values,
       },
       select: { id: true },
+    });
+  }
+
+  // a tweet added by its link: X only gives its text, the counts of a tweet
+  // that is already known are kept
+  upsertLinkedTweet(
+    orgId: string,
+    tweetId: string,
+    tweet: Omit<XTweetValues, 'likes' | 'reposts' | 'replies' | 'views'>
+  ) {
+    return this._xViralTweet.model.xViralTweet.upsert({
+      where: { organizationId_tweetId: { organizationId: orgId, tweetId } },
+      update: { source: 'manual', deletedAt: null },
+      create: {
+        organizationId: orgId,
+        tweetId,
+        source: 'manual',
+        url: tweet.url,
+        authorHandle: tweet.authorHandle,
+        authorName: tweet.authorName || null,
+        text: tweet.text,
+        mediaType: tweet.mediaType,
+        postedAt: tweet.postedAt ? new Date(tweet.postedAt) : null,
+      },
+      select: { id: true },
+    });
+  }
+
+  getTweetsByIds(orgId: string, ids: string[]) {
+    return this._xViralTweet.model.xViralTweet.findMany({
+      where: { organizationId: orgId, id: { in: ids }, deletedAt: null },
+      select: { id: true, text: true, authorHandle: true },
+    });
+  }
+
+  createRepurpose(orgId: string, sourceTweetIds: string[], variations: string[][]) {
+    return this._xRepurpose.model.xRepurpose.create({
+      data: {
+        organizationId: orgId,
+        sourceTweetIds,
+        variations: variations as unknown as Prisma.InputJsonValue,
+      },
+      select: { id: true },
+    });
+  }
+
+  getRepurpose(orgId: string, id: string) {
+    return this._xRepurpose.model.xRepurpose.findFirst({
+      where: { organizationId: orgId, id },
+      select: { id: true, variations: true },
+    });
+  }
+
+  setRepurposePost(
+    orgId: string,
+    id: string,
+    chosenIndex: number,
+    // with the chosen one as the user edited it
+    variations: string[][],
+    postId: string
+  ) {
+    return this._xRepurpose.model.xRepurpose.updateMany({
+      where: { organizationId: orgId, id },
+      data: {
+        chosenIndex,
+        postId,
+        variations: variations as unknown as Prisma.InputJsonValue,
+      },
     });
   }
 
@@ -169,6 +246,7 @@ export class XInspirationRepository {
       ...(query.hookType ? { hookType: query.hookType } : {}),
       ...(query.format ? { format: query.format } : {}),
       ...(query.minRatio ? { ratio: { gte: query.minRatio } } : {}),
+      ...(query.source ? { source: query.source } : {}),
       AND: and,
     };
 

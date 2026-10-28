@@ -34,7 +34,10 @@ import {
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import {
   XLibraryQueryDto,
+  XRepurposeDto,
+  XRepurposePostDto,
   XRewriteDto,
+  XSaveUrlDto,
   XVoiceDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
 
@@ -222,6 +225,14 @@ export class GrowthController {
     return this._xInspirationService.getLibrary(org.id, query);
   }
 
+  @Post('/x/library')
+  saveXTweet(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XSaveUrlDto
+  ) {
+    return this._xInspirationService.saveFromUrl(org.id, body);
+  }
+
   @Delete('/x/library/:id')
   hideXTweet(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
     return this._xInspirationService.hideTweet(org.id, id);
@@ -260,5 +271,24 @@ export class GrowthController {
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   generateXVoice(@GetOrgFromRequest() org: Organization) {
     return this._xInspirationService.generateVoice(org.id);
+  }
+
+  @Post('/x/repurpose')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  repurposeXTweets(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XRepurposeDto
+  ) {
+    return this._xInspirationService.repurpose(org.id, body);
+  }
+
+  @Post('/x/repurpose/:id/post')
+  @CheckPolicies([AuthorizationActions.Create, Sections.POSTS_PER_MONTH])
+  postXRepurpose(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XRepurposePostDto
+  ) {
+    return this._xInspirationService.postRepurpose(org.id, id, body);
   }
 }

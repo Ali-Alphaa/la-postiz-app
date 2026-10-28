@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod/v4';
+import { normalizeVariations } from '@gitroom/helpers/utils/x.library';
 import {
   X_FORMATS,
   X_HOOK_TYPES,
@@ -38,6 +39,18 @@ const RewritePrompt = z.object({
         .describe('The posts of the draft, each one 280 characters or less'),
     })
   ),
+});
+
+const RepurposePrompt = z.object({
+  variations: z
+    .array(
+      z.object({
+        posts: z
+          .array(z.string())
+          .describe('The posts of the variation, each one 280 characters or less'),
+      })
+    )
+    .describe('Exactly 5 variations'),
 });
 
 export type AiStatus = 'ok' | 'unavailable' | 'refusal' | 'rate_limited' | 'error';
@@ -242,5 +255,56 @@ Rules:
         .filter((posts) => posts.length)
         .slice(0, 3),
     };
+  }
+
+  // exactly 5 variations with the tone and the message of the source tweets
+  // (or the voice of the user), asked again once when the answer is short
+  async repurposeTweets(
+    tweets: Array<{ text: string }>,
+    options: { format: 'single' | 'thread'; styleGuide?: string }
+  ): Promise<AiResult<string[][]>> {
+    const voice = options.styleGuide?.trim()
+      ? `Write in the creator's voice, following their style guide:
+<style_guide>
+${options.styleGuide.trim()}
+</style_guide>`
+      : 'Keep the same tone, register and attitude as the source: someone who liked the source must recognize the same message and the same feeling.';
+
+    const system = `You repurpose X (Twitter) posts. You get ${
+      tweets.length > 1 ? 'several source posts' : 'a source post'
+    } and write exactly 5 variations that keep the same core message.
+${voice}
+Rules:
+- Exactly 5 variations, each with a different angle, hook or structure.
+- ${
+      options.format === 'thread'
+        ? 'Every variation is a thread of 3 to 7 posts.'
+        : 'Every variation is a single post.'
+    }
+- Every post is 280 characters or less.
+- Never copy distinctive phrases or sentences of the source and never mention its author.
+- No numbers, results, names or claims beyond what the source says.
+- No hashtags, unless the source uses them.`;
+
+    const content = tweets
+      .map((p, index) => `<source_${index + 1}>\n${p.text}\n</source_${index + 1}>`)
+      .join('\n\n');
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await this.parse(RepurposePrompt, system, content, 'medium');
+      if (result.status !== 'ok') {
+        return result;
+      }
+
+      const variations = normalizeVariations(
+        result.data.variations.map((p) => p.posts)
+      );
+      if (variations) {
+        return { status: 'ok', data: variations };
+      }
+      this._logger.warn('Anthropic returned less than 5 variations, asking again');
+    }
+
+    return { status: 'error' };
   }
 }
