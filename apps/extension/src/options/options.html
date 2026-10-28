@@ -44,6 +44,16 @@
         flex-direction: column;
         gap: 16px;
       }
+      h2 {
+        font-size: 16px;
+        margin: 8px 0 0;
+      }
+      label.inline {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        font-weight: 400;
+      }
       h1 {
         font-size: 20px;
         margin: 0;
@@ -84,10 +94,12 @@
         color: inherit;
         border-color: var(--border);
       }
-      #status.ok {
+      #status.ok,
+      #run.ok {
         color: var(--ok);
       }
-      #status.error {
+      #status.error,
+      #run.error {
         color: var(--error);
       }
     </style>
@@ -119,6 +131,31 @@
           <div id="status" role="status"></div>
         </div>
       </form>
+      <section class="fields" aria-labelledby="scheduler-title">
+        <h2 id="scheduler-title">X scheduler (X Premium)</h2>
+        <p>
+          Posts you queue in Postiz (Growth, X Inspiration, "Scheduled in X")
+          are put into X's own scheduler when you click Sync. X then publishes
+          them at their time, even when this computer is off. Text only: no
+          media and no threads. The extension opens x.com, fills the composer
+          and its schedule dialog, and clicks "Schedule", never "Post". Use X
+          in English while syncing.
+        </p>
+        <div id="pending">Checking the queue…</div>
+        <label class="inline">
+          <input id="dryRun" type="checkbox" />
+          Dry run: fill everything, stop before the last click, report nothing
+        </label>
+        <div class="actions">
+          <button type="button" id="sync">Sync to X scheduler</button>
+          <button type="button" class="secondary" id="stop" hidden>Stop</button>
+        </div>
+        <div id="run" role="status"></div>
+        <p>
+          The toolbar badge shows the posts waiting for the X scheduler
+          (orange), otherwise the tweets saved to your library today (purple).
+        </p>
+      </section>
     </main>
     <script type="module" src="./options.ts"></script>
   </body>

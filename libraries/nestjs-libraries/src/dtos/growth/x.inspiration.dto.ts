@@ -288,5 +288,68 @@ export class XFetchSaveDto {
   tweetIds: string[];
 }
 
+// posts the extension puts into X's own scheduler (X Premium)
+export const X_NATIVE_STATUSES = [
+  'pending',
+  'syncing',
+  'synced',
+  'failed',
+  'cancelled',
+] as const;
+export type XNativeStatus = (typeof X_NATIVE_STATUSES)[number];
+
+export class XNativeDto {
+  @IsString()
+  @IsDefined()
+  @MaxLength(2000)
+  text: string;
+
+  @IsDateString()
+  scheduledAt: string;
+}
+
+export class XNativeUpdateDto {
+  @IsString()
+  @IsOptional()
+  @MaxLength(2000)
+  text?: string;
+
+  @IsDateString()
+  @IsOptional()
+  scheduledAt?: string;
+}
+
+export class XNativeListDto {
+  @IsOptional()
+  @IsIn(X_NATIVE_STATUSES)
+  status?: XNativeStatus;
+}
+
+export class XNativeQueueDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  @Transform(({ value }) => parseInt(value, 10))
+  days?: number = 14;
+}
+
+export class XNativeResultDto {
+  @IsBoolean()
+  ok: boolean;
+
+  @IsString()
+  @IsOptional()
+  @MaxLength(500)
+  error?: string;
+}
+
+export class XRepurposeNativeDto extends XNativeDto {
+  @IsInt()
+  @Min(0)
+  @Max(4)
+  index: number;
+}
+
 export type XHookType = (typeof X_HOOK_TYPES)[number];
 export type XFormat = (typeof X_FORMATS)[number];

@@ -154,6 +154,15 @@ export const useXFetcher = () => {
   return useSWR('growth-x-fetcher', load);
 };
 
+// the queue of posts for X's own scheduler (synced by the extension)
+export const useXNative = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/growth/x/native')).json();
+  }, []);
+  return useSWR('growth-x-native', load);
+};
+
 // the error message of a failed request, as the backend sends it
 export const errorMessage = async (response: Response, fallback: string) => {
   try {

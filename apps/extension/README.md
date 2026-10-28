@@ -12,9 +12,14 @@ Chrome extension (Manifest V3) with two features:
     whatever its likes;
   - your own tweets (when you open your profile) feed your voice profile.
 
+  - **X scheduler** (X Premium): posts queued in Postiz are put into X's own
+    scheduler when you click **Sync to X scheduler** in the extension options;
+    X then publishes them even when your computer is off.
+
   The extension only reads the pages you open. It never scrolls, clicks,
   follows, likes or posts on X, and it makes no calls to X.
-  The toolbar badge shows how many tweets were saved today.
+  The toolbar badge shows the posts waiting for the X scheduler (orange)
+  when there are some, otherwise how many tweets were saved today (purple).
 
 ## Build
 
@@ -84,3 +89,40 @@ Never use the cookies of your main X account. The fetcher spaces its
 requests by at least one second, times out after ten seconds, and stops at
 the daily limit. Its code is partly adapted from XActions (Apache-2.0), see
 `libraries/nestjs-libraries/src/x-fetcher/NOTICE.md`.
+
+## X scheduler (X Premium, free)
+
+Posting through the X API costs money per post. With X Premium, the web
+composer of x.com has its own scheduler, and X publishes scheduled posts from
+its servers. Postiz keeps a queue of such posts (Growth → X Inspiration →
+"Scheduled in X", or "Schedule in X" on a repurposed variation), and the
+extension puts them into X's scheduler **only when you click Sync**:
+
+1. Open the extension options (click its icon). The "X scheduler" section
+   shows how many posts are waiting.
+2. Leave **Dry run** on the first time: the extension opens x.com, fills the
+   composer and the schedule dialog of each post, and stops before the last
+   click. Nothing is scheduled and nothing is reported to Postiz.
+3. Turn Dry run off and click **Sync N posts to X scheduler**. For each post
+   (25 at most per run, 3 to 8 seconds apart) the extension opens
+   `https://x.com/compose/post`, types the text, opens the schedule dialog,
+   picks the date and time (in the time zone of this computer), confirms, and
+   clicks the composer button only if it says **Schedule**. If it would say
+   "Post" (publish now), the post is skipped and reported as failed. A Stop
+   button is shown on x.com while it runs.
+4. Before touching a post, the extension claims it in Postiz (status
+   "syncing"), so a post can never be scheduled twice; a dry run claims
+   nothing. Each result goes back to Postiz (synced or failed). When the
+   outcome is unknown (the x.com tab stopped answering after the composer was
+   filled), the claim stays open and, after 15 minutes, Postiz shows the post
+   as "Needs check": look at X's scheduled posts and click "It's in X" or
+   "Retry". A synced post is
+   managed in X from then on (x.com → composer → Unsent posts → Scheduled).
+
+Limits: text only (no media, no threads: X does not schedule threads from
+the web), up to 280 characters, at least 10 minutes and at most 18 months
+ahead; use X in English while syncing (the button label is checked); Chrome
+must be open and signed in to X when you click Sync, at least once before
+the first post time. The selectors live in `src/x/native.scheduler.ts`: they
+were written from X's 2026 markup and not verified against the live site,
+so expect to adjust them when X changes its composer.

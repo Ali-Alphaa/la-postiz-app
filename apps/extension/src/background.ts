@@ -3,6 +3,8 @@ import { getAllProviders, getProvider } from './providers/provider.registry';
 import { CookieProvider } from './providers/cookie-provider.interface';
 import { XInternalRequest } from './types/messages';
 import { getSettings, publicApiUrl, XSettings } from './x/settings';
+import { badgeFor } from './x/badge';
+import { COMPOSE_URL, NativeItem, NativeResult } from './x/native.scheduler';
 
 const EXTENSION_VERSION = '2.0.0';
 const REFRESH_ALARM_NAME = 'cookie-refresh';
@@ -217,18 +219,33 @@ const BADGE_KEY = 'xBadge';
 
 const localDay = () => new Date().toLocaleDateString('en-CA');
 
+const PENDING_KEY = 'xNativePending';
+
+// pending posts for X's scheduler first (orange), else the tweets saved today
+async function renderBadge() {
+  const stored = await chrome.storage.local.get([BADGE_KEY, PENDING_KEY]);
+  const saved = stored[BADGE_KEY];
+  const badge = badgeFor({
+    pending: stored[PENDING_KEY]?.count || 0,
+    savedToday: saved?.day === localDay() ? saved.count || 0 : 0,
+  });
+  await chrome.action.setBadgeBackgroundColor({ color: badge.color });
+  await chrome.action.setBadgeText({ text: badge.text });
+}
+
 async function setBadge(count: number) {
   await chrome.storage.local.set({ [BADGE_KEY]: { day: localDay(), count } });
-  await chrome.action.setBadgeBackgroundColor({ color: '#612BD3' });
-  await chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
+  await renderBadge();
+}
+
+async function setPending(count: number) {
+  await chrome.storage.local.set({ [PENDING_KEY]: { count, at: Date.now() } });
+  await renderBadge();
 }
 
 // the badge counts the tweets saved today: it is cleared on a new day
 async function restoreBadge() {
-  const stored = (await chrome.storage.local.get(BADGE_KEY))[BADGE_KEY];
-  await chrome.action.setBadgeText({
-    text: stored?.day === localDay() && stored.count > 0 ? String(stored.count) : '',
-  });
+  await renderBadge();
 }
 
 async function callPostiz(
@@ -306,6 +323,21 @@ chrome.runtime.onMessage.addListener(
         callPostiz(message.settings, '/is-connected').then(sendResponse);
         return true;
       }
+      case 'X_NATIVE_STATUS': {
+        refreshPending().then(sendResponse);
+        return true;
+      }
+      case 'X_NATIVE_SYNC': {
+        sendResponse(startNativeSync(!!message.dryRun));
+        return false;
+      }
+      case 'X_NATIVE_STOP': {
+        if (nativeRun) {
+          nativeRun.stop = true;
+        }
+        sendResponse({ ok: true });
+        return false;
+      }
       default:
         return false;
     }
@@ -316,4 +348,188 @@ chrome.action.onClicked.addListener(() => {
   chrome.runtime.openOptionsPage();
 });
 
+// --- X scheduler: on the user's click, put the queued posts into X's own
+// scheduler (X Premium), one composer at a time in an x.com tab ---
+
+const RUN_KEY = 'xNativeRun';
+const MAX_ITEMS = 25;
+const NATIVE_ALARM = 'x-native-refresh';
+let nativeRun: { stop: boolean } | null = null;
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function refreshPending() {
+  const settings = await getSettings();
+  const result = await callPostiz(settings, '/x/native/queue?days=14');
+  if (result.ok && typeof result.pending === 'number') {
+    await setPending(result.pending);
+  }
+  return result;
+}
+
+async function setRunState(state: Record<string, unknown>) {
+  await chrome.storage.local.set({ [RUN_KEY]: { ...state, at: Date.now() } });
+}
+
+// resolves once the tab finished loading (or after 30s)
+function waitForTab(tabId: number) {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(done, 30000);
+    function done() {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      resolve();
+    }
+    function listener(id: number, info: chrome.tabs.TabChangeInfo) {
+      if (id === tabId && info.status === 'complete') {
+        done();
+      }
+    }
+    chrome.tabs.onUpdated.addListener(listener);
+  });
+}
+
+// The content script may need a moment after the page loaded: a message
+// that never reached it is sent again. A message that reached it but got no
+// answer (the page navigated away) is NOT sent again: the post may already
+// be in X's scheduler, its claim stays open for the user to check.
+async function runInTab(
+  tabId: number,
+  message: Record<string, unknown>
+): Promise<NativeResult & { unknown?: boolean }> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const result = await chrome.tabs.sendMessage(tabId, message);
+      return result || { ok: false, unknown: true, error: 'No answer from x.com' };
+    } catch (err) {
+      if (!/receiving end does not exist/i.test((err as Error)?.message || '')) {
+        return { ok: false, unknown: true, error: 'No answer from x.com' };
+      }
+      await pause(1500);
+    }
+  }
+  return { ok: false, error: 'The x.com tab did not answer' };
+}
+
+async function nativeSync(dryRun: boolean) {
+  const settings = await getSettings();
+  const queue = await callPostiz(settings, '/x/native/queue?days=14');
+  if (!queue.ok) {
+    await setRunState({ running: false, error: queue.error });
+    return;
+  }
+
+  const items: NativeItem[] = (queue.items || []).slice(0, MAX_ITEMS);
+  let synced = 0;
+  let failed = 0;
+  let skipped = 0;
+  let unknown = 0;
+  await setRunState({ running: true, dryRun, done: 0, total: items.length, synced, failed });
+
+  const [existing] = await chrome.tabs.query({ url: ['https://x.com/*'] });
+  const tab = existing
+    ? await chrome.tabs.update(existing.id!, { active: true })
+    : await chrome.tabs.create({ url: 'https://x.com/home', active: true });
+
+  for (const [index, item] of items.entries()) {
+    if (nativeRun?.stop) {
+      break;
+    }
+    // a real sync takes the post first, so it can never be scheduled twice;
+    // a dry run touches nothing
+    if (!dryRun) {
+      const claim = await callPostiz(settings, `/x/native/${item.id}/claim`, {
+        method: 'POST',
+      });
+      if (!claim.ok) {
+        skipped++;
+        continue;
+      }
+    }
+
+    await chrome.tabs.update(tab!.id!, { url: COMPOSE_URL });
+    await waitForTab(tab!.id!);
+    await pause(2000);
+
+    const result = await runInTab(tab!.id!, {
+      type: 'X_NATIVE_RUN_ONE',
+      item,
+      dryRun,
+      index,
+      total: items.length,
+    });
+    if (result.ok) {
+      synced++;
+    } else if (result.unknown) {
+      unknown++;
+    } else {
+      failed++;
+    }
+    // a dry run changes nothing anywhere; an unknown outcome keeps its claim
+    if (!dryRun && !result.unknown) {
+      await callPostiz(settings, `/x/native/${item.id}/result`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ok: result.ok,
+          error:
+            result.error === 'Stopped'
+              ? 'Stopped before scheduling'
+              : result.error,
+        }),
+      });
+    }
+    await setRunState({
+      running: true,
+      dryRun,
+      done: index + 1,
+      total: items.length,
+      synced,
+      failed,
+      last: result.ok ? '' : result.error,
+    });
+
+    if (index < items.length - 1 && !nativeRun?.stop) {
+      await pause(3000 + Math.floor(Math.random() * 5000));
+    }
+  }
+
+  await setRunState({
+    running: false,
+    dryRun,
+    done: synced + failed + unknown + skipped,
+    total: items.length,
+    synced,
+    failed,
+    skipped,
+    unknown,
+    stopped: !!nativeRun?.stop,
+  });
+  await refreshPending();
+}
+
+function startNativeSync(dryRun: boolean) {
+  if (nativeRun) {
+    return { ok: false, error: 'A sync is already running' };
+  }
+  nativeRun = { stop: false };
+  nativeSync(dryRun)
+    .catch((err) => setRunState({ running: false, error: (err as Error).message }))
+    .finally(() => {
+      nativeRun = null;
+    });
+  return { ok: true };
+}
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === NATIVE_ALARM) {
+    refreshPending().catch(() => {});
+  }
+});
+chrome.alarms.get(NATIVE_ALARM).then((alarm) => {
+  if (!alarm) {
+    chrome.alarms.create(NATIVE_ALARM, { periodInMinutes: 30 });
+  }
+});
+
 restoreBadge().catch(() => {});
+refreshPending().catch(() => {});

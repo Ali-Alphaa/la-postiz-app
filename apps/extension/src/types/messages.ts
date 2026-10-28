@@ -114,4 +114,7 @@ export type XInternalRequest =
   | {
       type: 'X_TEST_CONNECTION';
       settings: { baseUrl: string; apiKey: string };
-    };
+    }
+  | { type: 'X_NATIVE_STATUS' }
+  | { type: 'X_NATIVE_SYNC'; dryRun: boolean }
+  | { type: 'X_NATIVE_STOP' };

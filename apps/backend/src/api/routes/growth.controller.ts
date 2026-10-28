@@ -33,11 +33,16 @@ import {
 } from '@gitroom/nestjs-libraries/dtos/growth/competitor.dto';
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
+import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
 import {
   XFetchSaveDto,
   XFetchSearchDto,
   XFetchUserDto,
   XLibraryQueryDto,
+  XNativeDto,
+  XNativeListDto,
+  XNativeUpdateDto,
+  XRepurposeNativeDto,
   XRepurposeDto,
   XRepurposePostDto,
   XRewriteDto,
@@ -53,7 +58,8 @@ export class GrowthController {
     private _growthSettingsService: GrowthSettingsService,
     private _competitorsService: CompetitorsService,
     private _xInspirationService: XInspirationService,
-    private _xFetcherService: XFetcherService
+    private _xFetcherService: XFetcherService,
+    private _xNativeService: XNativeService
   ) {}
 
   @Get('/settings')
@@ -325,5 +331,65 @@ export class GrowthController {
     @Body() body: XFetchSaveDto
   ) {
     return this._xInspirationService.saveFetched(org.id, body.tweetIds);
+  }
+
+  // posts the extension puts into X's own scheduler (X Premium), on click
+  @Get('/x/native')
+  listXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: XNativeListDto
+  ) {
+    return this._xNativeService.list(org.id, query.status);
+  }
+
+  @Post('/x/native')
+  createXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XNativeDto
+  ) {
+    return this._xNativeService.create(org.id, body);
+  }
+
+  @Put('/x/native/:id')
+  updateXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XNativeUpdateDto
+  ) {
+    return this._xNativeService.update(org.id, id, body);
+  }
+
+  @Delete('/x/native/:id')
+  cancelXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._xNativeService.cancel(org.id, id);
+  }
+
+  // a post the extension claimed without reporting back: the user checked X
+  @Post('/x/native/:id/confirm')
+  confirmXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._xNativeService.confirm(org.id, id);
+  }
+
+  @Post('/x/native/:id/retry')
+  retryXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._xNativeService.retry(org.id, id);
+  }
+
+  @Post('/x/repurpose/:id/native')
+  nativeXRepurpose(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XRepurposeNativeDto
+  ) {
+    return this._xNativeService.fromRepurpose(org.id, id, body);
   }
 }

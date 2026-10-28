@@ -188,6 +188,22 @@ export class XInspirationRepository {
     });
   }
 
+  // the variation the user sent to X's own scheduler (no Postiz post)
+  setRepurposeChoice(
+    orgId: string,
+    id: string,
+    chosenIndex: number,
+    variations: string[][]
+  ) {
+    return this._xRepurpose.model.xRepurpose.updateMany({
+      where: { organizationId: orgId, id },
+      data: {
+        chosenIndex,
+        variations: variations as unknown as Prisma.InputJsonValue,
+      },
+    });
+  }
+
   setRepurposePost(
     orgId: string,
     id: string,
