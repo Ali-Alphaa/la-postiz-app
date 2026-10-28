@@ -455,7 +455,11 @@ export class XProvider extends SocialAbstract implements SocialProvider {
         (process.env.X_URL || process.env.FRONTEND_URL) +
           `/integrations/social/x`,
         {
-          authAccessType: 'write',
+          // X grants DMs only when no access type is requested and the app
+          // itself is set to "Read and write and Direct message"
+          ...(process.env.X_DM_ACCESS === 'true'
+            ? {}
+            : { authAccessType: 'write' as const }),
           linkMode: 'authenticate',
           forceLogin: false,
         }

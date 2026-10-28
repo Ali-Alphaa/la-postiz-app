@@ -34,6 +34,7 @@ services:
       X_URL: ''
       X_API_KEY: ''
       X_API_SECRET: ''
+      X_DM_ACCESS: ''
       LINKEDIN_CLIENT_ID: ''
       LINKEDIN_CLIENT_SECRET: ''
       REDDIT_CLIENT_ID: ''
