@@ -181,6 +181,17 @@ export class XVoiceDto {
 export class XRewriteDto {
   @IsIn(['single', 'thread'])
   format: 'single' | 'thread';
+
+  // the X account whose voice to write in; default: the account of the
+  // channel the post goes to, else the most recent voice
+  @IsOptional()
+  @IsString()
+  @Matches(/^@?[A-Za-z0-9_]{1,15}$/)
+  voiceHandle?: string;
+
+  @IsOptional()
+  @IsString()
+  integrationId?: string;
 }
 
 // a tweet added from the Postiz page by its link
@@ -211,6 +222,17 @@ export class XRepurposeDto {
   @IsBoolean()
   @IsOptional()
   useMyVoice?: boolean;
+
+  // the X account whose voice to write in; default: the account of the
+  // channel the post goes to, else the most recent voice
+  @IsOptional()
+  @IsString()
+  @Matches(/^@?[A-Za-z0-9_]{1,15}$/)
+  voiceHandle?: string;
+
+  @IsOptional()
+  @IsString()
+  integrationId?: string;
 }
 
 export class XRepurposePostDto {
@@ -306,6 +328,12 @@ export class XNativeDto {
 
   @IsDateString()
   scheduledAt: string;
+
+  // the X account to schedule it on (empty: any)
+  @IsOptional()
+  @IsString()
+  @Matches(/^@?[A-Za-z0-9_]{1,15}$/)
+  handle?: string;
 }
 
 export class XNativeUpdateDto {

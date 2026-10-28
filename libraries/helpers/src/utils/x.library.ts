@@ -311,3 +311,10 @@ export const nativeScheduleError = (
   }
   return null;
 };
+
+// an X handle as the voices and the scheduler queue store it: lowercase,
+// without @; null when it is not a handle
+export const normalizeVoiceHandle = (value?: string | null) => {
+  const handle = (value || '').trim().replace(/^@/, '').toLowerCase();
+  return /^[a-z0-9_]{1,15}$/.test(handle) ? handle : null;
+};

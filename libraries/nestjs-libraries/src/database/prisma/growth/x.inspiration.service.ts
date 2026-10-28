@@ -13,6 +13,7 @@ import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/po
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
+import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.service';
 import {
   XCaptureDto,
   XCapturedTweetDto,
@@ -22,14 +23,11 @@ import {
   XSaveUrlDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
 import {
-  bestVoiceSamples,
   evaluateAuthor,
   likesRatio,
-  mergeVoiceSamples,
   oembedHtmlToTweet,
   parseTweetUrl,
   XLikeSample,
-  XVoiceSample,
 } from '@gitroom/helpers/utils/x.library';
 
 dayjs.extend(utc);
@@ -37,7 +35,6 @@ dayjs.extend(utc);
 const ANALYZE_BATCH = 20;
 const OEMBED_TIMEOUT = 8000;
 const ANALYZE_MAX_BATCHES = 5;
-const MIN_VOICE_SAMPLES = 5;
 
 // what is kept of a tweet that waits for a bigger author baseline
 const pendingPayload = (tweet: XCapturedTweetDto) => ({
@@ -88,7 +85,8 @@ export class XInspirationService {
     private _growthRepository: GrowthRepository,
     private _postsService: PostsService,
     private _integrationService: IntegrationService,
-    private _xFetcherService: XFetcherService
+    private _xFetcherService: XFetcherService,
+    private _xVoiceService: XVoiceService
   ) {}
 
   async capture(orgId: string, body: XCaptureDto) {
@@ -101,12 +99,23 @@ export class XInspirationService {
       !!tweet.own ||
       (!!ownHandle && tweet.authorHandle.toLowerCase() === ownHandle);
 
+    // each own tweet feeds the voice of its author only: browsing x.com as
+    // one account never changes the voice of another
     const own = tweets.filter(isOwn);
-    if (own.length) {
-      await this.saveOwnTweets(
+    for (const handle of new Set(
+      own.map((p) => p.authorHandle.toLowerCase())
+    )) {
+      await this._xVoiceService.addOwnTweets(
         orgId,
-        body.ownHandle || own[0].authorHandle,
+        handle,
         own
+          .filter((p) => p.authorHandle.toLowerCase() === handle)
+          .map((p) => ({
+            id: p.id,
+            text: p.text,
+            likes: p.likes,
+            postedAt: p.postedAt || null,
+          }))
       );
     }
 
@@ -220,24 +229,6 @@ export class XInspirationService {
     };
   }
 
-  private async saveOwnTweets(
-    orgId: string,
-    handle: string,
-    tweets: XCapturedTweetDto[]
-  ) {
-    const profile = await this._xInspirationRepository.getVoiceProfile(orgId);
-    const samples = mergeVoiceSamples(
-      (profile?.samples || []) as unknown as XVoiceSample[],
-      tweets.map((p) => ({
-        id: p.id,
-        text: p.text,
-        likes: p.likes,
-        postedAt: p.postedAt || null,
-      }))
-    );
-    await this._xInspirationRepository.saveVoiceSamples(orgId, handle, samples);
-  }
-
   // the capture request doesn't wait for Claude
   private analyzeInBackground(orgId: string) {
     if (!this._anthropicService.isAvailable() || this._analyzing.has(orgId)) {
@@ -338,49 +329,15 @@ export class XInspirationService {
     return { id };
   }
 
-  async getVoice(orgId: string) {
-    const profile = await this._xInspirationRepository.getVoiceProfile(orgId);
-    const samples = (profile?.samples || []) as unknown as XVoiceSample[];
-    return {
-      aiAvailable: this._anthropicService.isAvailable(),
-      handle: profile?.handle || null,
-      sampleCount: samples.length,
-      styleGuide: profile?.styleGuide || '',
-      generatedAt: profile?.generatedAt || null,
-      best: bestVoiceSamples(samples, 5),
-    };
-  }
-
-  async updateVoice(orgId: string, styleGuide: string) {
-    await this._xInspirationRepository.saveStyleGuide(orgId, styleGuide, false);
-    return { styleGuide };
-  }
-
-  async generateVoice(orgId: string) {
-    if (!this._anthropicService.isAvailable()) {
-      return { available: false, styleGuide: '', error: null };
+  async rewrite(
+    orgId: string,
+    id: string,
+    body: {
+      format: 'single' | 'thread';
+      voiceHandle?: string;
+      integrationId?: string;
     }
-
-    const profile = await this._xInspirationRepository.getVoiceProfile(orgId);
-    const samples = bestVoiceSamples(
-      (profile?.samples || []) as unknown as XVoiceSample[]
-    );
-    if (samples.length < MIN_VOICE_SAMPLES) {
-      throw new BadRequestException(
-        `At least ${MIN_VOICE_SAMPLES} of your tweets are needed: open your X profile with the extension installed`
-      );
-    }
-
-    const result = await this._anthropicService.generateVoiceGuide(samples);
-    if (result.status !== 'ok') {
-      return { available: true, styleGuide: '', error: result.status };
-    }
-
-    await this._xInspirationRepository.saveStyleGuide(orgId, result.data, true);
-    return { available: true, styleGuide: result.data, error: null };
-  }
-
-  async rewrite(orgId: string, id: string, format: 'single' | 'thread') {
+  ) {
     if (!this._anthropicService.isAvailable()) {
       return { available: false, drafts: [] as string[][], error: null };
     }
@@ -390,11 +347,12 @@ export class XInspirationService {
       throw new NotFoundException('Tweet not found');
     }
 
-    const profile = await this._xInspirationRepository.getVoiceProfile(orgId);
+    // without any voice yet, Claude writes in a plain style
+    const voice = await this._xVoiceService.resolve(orgId, body);
     const result = await this._anthropicService.rewriteInVoice(
       tweet.text,
-      profile?.styleGuide || '',
-      { format }
+      voice ? this._xVoiceService.styleGuideOrFail(voice) : '',
+      { format: body.format }
     );
     if (result.status !== 'ok') {
       return {
@@ -547,14 +505,13 @@ export class XInspirationService {
 
     let styleGuide: string | undefined;
     if (body.useMyVoice) {
-      styleGuide =
-        (await this._xInspirationRepository.getVoiceProfile(orgId))
-          ?.styleGuide || '';
-      if (!styleGuide.trim()) {
+      const voice = await this._xVoiceService.resolve(orgId, body);
+      if (!voice) {
         throw new BadRequestException(
-          'Write or generate your style guide in "My voice" first'
+          'Write or generate your style guide in "X: My voice" first'
         );
       }
+      styleGuide = this._xVoiceService.styleGuideOrFail(voice);
     }
 
     const result = await this._anthropicService.repurposeTweets(

@@ -10,6 +10,8 @@ export interface GrowthIntegration {
   identifier: string;
   picture: string;
   disabled: boolean;
+  // the username on the platform (the X handle for X)
+  display?: string;
   time: { time: number }[];
 }
 
@@ -138,12 +140,21 @@ export const useXLibrary = (filters: XLibraryFilters) => {
   return useSWR(`growth-x-library-${query}`, load);
 };
 
-export const useXVoice = () => {
+// one voice per X account, then the X channels without voice yet
+export const useXVoices = () => {
   const fetch = useFetch();
   const load = useCallback(async () => {
-    return (await fetch('/growth/x/voice')).json();
+    return (await fetch('/growth/x/voices')).json();
   }, []);
-  return useSWR('growth-x-voice', load);
+  return useSWR('growth-x-voices', load);
+};
+
+export const useXVoiceDetail = (handle: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/growth/x/voices/${handle}`)).json();
+  }, [handle]);
+  return useSWR(handle ? `growth-x-voice-${handle}` : null, load);
 };
 
 export const useXFetcher = () => {

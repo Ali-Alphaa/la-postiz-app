@@ -61,6 +61,8 @@ import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import { XNativeRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.repository';
 import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
+import { XVoiceRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.repository';
+import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.service';
 
 @Global()
 @Module({
@@ -131,6 +133,8 @@ import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth
     XFetcherService,
     XNativeRepository,
     XNativeService,
+    XVoiceRepository,
+    XVoiceService,
   ],
   get exports() {
     return this.providers;

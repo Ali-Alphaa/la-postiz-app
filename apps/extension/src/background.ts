@@ -4,7 +4,13 @@ import { CookieProvider } from './providers/cookie-provider.interface';
 import { XInternalRequest } from './types/messages';
 import { getSettings, publicApiUrl, XSettings } from './x/settings';
 import { badgeFor } from './x/badge';
-import { COMPOSE_URL, NativeItem, NativeResult } from './x/native.scheduler';
+import {
+  COMPOSE_URL,
+  NativeItem,
+  NativeResult,
+  splitByAccount,
+  wrongAccountMessage,
+} from './x/native.scheduler';
 
 const EXTENSION_VERSION = '2.0.0';
 const REFRESH_ALARM_NAME = 'cookie-refresh';
@@ -411,6 +417,18 @@ async function runInTab(
   return { ok: false, error: 'The x.com tab did not answer' };
 }
 
+// the handle signed in on x.com, read by the content script of the tab
+async function whoAmI(tabId: number): Promise<string | null> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      return (await chrome.tabs.sendMessage(tabId, { type: 'X_WHO_AM_I' })) || null;
+    } catch {
+      await pause(1500);
+    }
+  }
+  return null;
+}
+
 async function nativeSync(dryRun: boolean) {
   const settings = await getSettings();
   const queue = await callPostiz(settings, '/x/native/queue?days=14');
@@ -419,17 +437,32 @@ async function nativeSync(dryRun: boolean) {
     return;
   }
 
-  const items: NativeItem[] = (queue.items || []).slice(0, MAX_ITEMS);
-  let synced = 0;
-  let failed = 0;
-  let skipped = 0;
-  let unknown = 0;
-  await setRunState({ running: true, dryRun, done: 0, total: items.length, synced, failed });
-
   const [existing] = await chrome.tabs.query({ url: ['https://x.com/*'] });
   const tab = existing
     ? await chrome.tabs.update(existing.id!, { active: true })
     : await chrome.tabs.create({ url: 'https://x.com/home', active: true });
+  if (!existing || existing.status !== 'complete') {
+    await waitForTab(tab!.id!);
+  }
+
+  // only the posts of the account signed in on x.com; the others wait
+  const loggedIn = await whoAmI(tab!.id!);
+  const split = splitByAccount(queue.items || [], loggedIn);
+  const wrongAccount = wrongAccountMessage(split.skipped, split.handles);
+  const items: NativeItem[] = split.run.slice(0, MAX_ITEMS);
+  let synced = 0;
+  let failed = 0;
+  let skipped = 0;
+  let unknown = 0;
+  await setRunState({
+    running: true,
+    dryRun,
+    done: 0,
+    total: items.length,
+    synced,
+    failed,
+    wrongAccount,
+  });
 
   for (const [index, item] of items.entries()) {
     if (nativeRun?.stop) {
@@ -457,6 +490,7 @@ async function nativeSync(dryRun: boolean) {
       dryRun,
       index,
       total: items.length,
+      wrongAccount,
     });
     if (result.ok) {
       synced++;
@@ -486,6 +520,7 @@ async function nativeSync(dryRun: boolean) {
       synced,
       failed,
       last: result.ok ? '' : result.error,
+      wrongAccount,
     });
 
     if (index < items.length - 1 && !nativeRun?.stop) {
@@ -502,6 +537,7 @@ async function nativeSync(dryRun: boolean) {
     failed,
     skipped,
     unknown,
+    wrongAccount,
     stopped: !!nativeRun?.stop,
   });
   await refreshPending();

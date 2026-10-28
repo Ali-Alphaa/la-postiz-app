@@ -57,6 +57,7 @@ model Organization {
   xRepurposes         XRepurpose[]
   xFetcherUsages      XFetcherUsage[]
   xNativeSchedules    XNativeSchedule[]
+  xVoices             XVoice[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -798,12 +799,35 @@ model XNativeSchedule {
   claimedAt         DateTime?
   error             String?
   sourceRepurposeId String?
+  // the X account it is for (lowercase, no @); null: any account
+  handle            String?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
   deletedAt         DateTime?
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, status, scheduledAt])
+}
+
+// The voice of one X account of the organization: its own tweets (collected
+// by the extension on its profile) and the style guide written from them.
+// Replaces XVoiceProfile (one per organization), which is kept as it is and
+// copied here the first time the voices are read.
+model XVoice {
+  id             String       @id @default(uuid())
+  organizationId String
+  // lowercase, no @
+  handle         String
+  // the X channel of this account, when it is connected
+  integrationId  String?
+  samples        Json         @default("[]")
+  styleGuide     String?      @db.Text
+  generatedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, handle])
 }
 
 model Notifications {

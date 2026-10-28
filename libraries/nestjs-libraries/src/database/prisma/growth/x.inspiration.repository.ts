@@ -2,7 +2,7 @@ import { PrismaRepository } from '@gitroom/nestjs-libraries/database/prisma/pris
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { XLibraryQueryDto } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
-import { XLikeSample, XVoiceSample } from '@gitroom/helpers/utils/x.library';
+import { XLikeSample } from '@gitroom/helpers/utils/x.library';
 
 export interface XTweetValues {
   url: string;
@@ -47,7 +47,6 @@ export class XInspirationRepository {
   constructor(
     private _xAuthorBaseline: PrismaRepository<'xAuthorBaseline'>,
     private _xViralTweet: PrismaRepository<'xViralTweet'>,
-    private _xVoiceProfile: PrismaRepository<'xVoiceProfile'>,
     private _xRepurpose: PrismaRepository<'xRepurpose'>,
     private _xFetcherUsage: PrismaRepository<'xFetcherUsage'>
   ) {}
@@ -348,45 +347,6 @@ export class XInspirationRepository {
       select: { topics: true },
       orderBy: { capturedAt: 'desc' },
       take: 500,
-    });
-  }
-
-  getVoiceProfile(orgId: string) {
-    return this._xVoiceProfile.model.xVoiceProfile.findUnique({
-      where: { organizationId: orgId },
-      select: {
-        handle: true,
-        samples: true,
-        styleGuide: true,
-        generatedAt: true,
-        updatedAt: true,
-      },
-    });
-  }
-
-  saveVoiceSamples(orgId: string, handle: string, samples: XVoiceSample[]) {
-    const values = {
-      handle,
-      samples: samples as unknown as Prisma.InputJsonValue,
-    };
-    return this._xVoiceProfile.model.xVoiceProfile.upsert({
-      where: { organizationId: orgId },
-      update: values,
-      create: { organizationId: orgId, ...values },
-      select: { id: true },
-    });
-  }
-
-  saveStyleGuide(orgId: string, styleGuide: string, generated: boolean) {
-    const values = {
-      styleGuide,
-      ...(generated ? { generatedAt: new Date() } : {}),
-    };
-    return this._xVoiceProfile.model.xVoiceProfile.upsert({
-      where: { organizationId: orgId },
-      update: values,
-      create: { organizationId: orgId, ...values },
-      select: { id: true },
     });
   }
 

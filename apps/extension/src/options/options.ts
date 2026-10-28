@@ -89,6 +89,7 @@ const dryRun = document.getElementById('dryRun') as HTMLInputElement;
 const sync = document.getElementById('sync') as HTMLButtonElement;
 const stop = document.getElementById('stop') as HTMLButtonElement;
 const run = document.getElementById('run') as HTMLDivElement;
+const wrong = document.getElementById('wrongAccount') as HTMLDivElement;
 let pendingCount = 0;
 
 const showPending = (count: number) => {
@@ -108,6 +109,7 @@ const showRun = (state: any) => {
   }
   sync.disabled = !!state.running;
   stop.hidden = !state.running;
+  wrong.textContent = state.wrongAccount || '';
   if (state.error) {
     run.textContent = state.error;
     run.className = 'error';

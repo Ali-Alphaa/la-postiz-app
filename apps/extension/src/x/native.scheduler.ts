@@ -289,7 +289,41 @@ export interface NativeItem {
   id: string;
   text: string;
   scheduledAt: string;
+  // the X account it is for (lowercase); null: any account
+  handle?: string | null;
 }
+
+// The posts of another X account than the one signed in on x.com are left
+// for a later sync (never claimed); posts without account go with any
+export const splitByAccount = (
+  items: NativeItem[],
+  loggedIn: string | null
+) => {
+  const current = (loggedIn || '').toLowerCase();
+  const run: NativeItem[] = [];
+  const other: NativeItem[] = [];
+  for (const item of items) {
+    if (item.handle && item.handle.toLowerCase() !== current) {
+      other.push(item);
+    } else {
+      run.push(item);
+    }
+  }
+  return {
+    run,
+    skipped: other.length,
+    handles: [...new Set(other.map((p) => p.handle!.toLowerCase()))],
+  };
+};
+
+export const wrongAccountMessage = (skipped: number, handles: string[]) =>
+  skipped
+    ? `${skipped} post${
+        skipped > 1 ? 's' : ''
+      } skipped — switch x.com to ${handles
+        .map((p) => `@${p}`)
+        .join(' or ')} and sync again`
+    : '';
 
 export interface NativeResult {
   ok: boolean;

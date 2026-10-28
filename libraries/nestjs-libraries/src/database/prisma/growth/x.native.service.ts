@@ -12,7 +12,10 @@ import {
   XNativeUpdateDto,
   XRepurposeNativeDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
-import { nativeScheduleError } from '@gitroom/helpers/utils/x.library';
+import {
+  nativeScheduleError,
+  normalizeVoiceHandle,
+} from '@gitroom/helpers/utils/x.library';
 import { weightedLength } from '@gitroom/helpers/utils/count.length';
 
 // The queue of posts the browser extension puts into X's own scheduler
@@ -55,6 +58,7 @@ export class XNativeService {
       text,
       scheduledAt,
       sourceRepurposeId,
+      handle: normalizeVoiceHandle(body.handle),
     });
   }
 
