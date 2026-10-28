@@ -91,6 +91,9 @@ services:
 
       # === Misc Settings
       OPENAI_API_KEY: ''
+      # Claude for the X library of the Growth page (model defaults to claude-opus-5-5)
+      ANTHROPIC_API_KEY: ''
+      ANTHROPIC_MODEL: ''
       # Only this OAuth client can receive verified user email claims via OIDC.
       OPENAI_OAUTH_CLIENT_ID: ''
       NEXT_PUBLIC_DISCORD_SUPPORT: ''
