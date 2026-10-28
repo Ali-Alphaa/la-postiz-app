@@ -121,7 +121,9 @@ const showRun = (state: any) => {
       }`
     : `${prefix}${state.synced} ${state.dryRun ? 'ready' : 'scheduled in X'}, ${
         state.failed
-      } failed${state.stopped ? ' (stopped)' : ''}`;
+      } failed${state.unknown ? `, ${state.unknown} to check in Postiz` : ''}${
+        state.skipped ? `, ${state.skipped} skipped` : ''
+      }${state.stopped ? ' (stopped)' : ''}`;
 };
 
 // the very first run is a dry run; the choice is kept afterwards

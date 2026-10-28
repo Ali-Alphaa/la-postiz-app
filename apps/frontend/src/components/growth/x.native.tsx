@@ -24,6 +24,8 @@ const MAX_LENGTH = 280;
 
 const STATUS_CLASS: Record<string, string> = {
   pending: 'bg-orange-500 text-white',
+  syncing: 'bg-blue-500 text-white',
+  needsCheck: 'bg-yellow-500 text-black',
   synced: 'bg-green-600 text-white',
   failed: 'bg-red-500 text-white',
   cancelled: 'border border-newTableBorder text-newTextColor/60',
@@ -124,10 +126,31 @@ const NativeForm: FC<{
 export const XNativeScheduler: FC = () => {
   const t = useT();
   const fetch = useFetch();
+  const toaster = useToaster();
   const { data, mutate } = useXNative();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState('');
   const [showAll, setShowAll] = useState(false);
+
+  // a claim with no result: the user checked X's scheduled posts
+  const act = useCallback(
+    (id: string, action: 'confirm' | 'retry') => async () => {
+      const response = await fetch(`/growth/x/native/${id}/${action}`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        toaster.show(
+          await errorMessage(
+            response,
+            t('something_went_wrong', 'Something went wrong')
+          ),
+          'warning'
+        );
+      }
+      mutate();
+    },
+    []
+  );
 
   const cancel = useCallback(
     (id: string) => async () => {
@@ -214,10 +237,17 @@ export const XNativeScheduler: FC = () => {
                 <span
                   className={clsx(
                     'px-[8px] py-[1px] rounded-full',
-                    STATUS_CLASS[item.status]
+                    STATUS_CLASS[item.needsCheck ? 'needsCheck' : item.status]
                   )}
                 >
-                  {item.status === 'pending'
+                  {item.needsCheck
+                    ? t(
+                        'x_native_needs_check',
+                        "Needs check — may already be in X's scheduler"
+                      )
+                    : item.status === 'syncing'
+                    ? t('x_native_syncing', 'syncing to X…')
+                    : item.status === 'pending'
                     ? t('x_native_pending', 'waiting for sync')
                     : item.status === 'synced'
                     ? t('x_native_synced', 'in X scheduler')
@@ -236,6 +266,24 @@ export const XNativeScheduler: FC = () => {
                 <div className="text-[12px] text-red-400">{item.error}</div>
               )}
             </div>
+            {item.needsCheck && (
+              <button
+                type="button"
+                className="text-[13px] underline text-newTextColor/70"
+                onClick={act(item.id, 'confirm')}
+              >
+                {t('x_native_its_in_x', "It's in X")}
+              </button>
+            )}
+            {(item.needsCheck || item.status === 'failed') && (
+              <button
+                type="button"
+                className="text-[13px] underline text-newTextColor/70"
+                onClick={act(item.id, 'retry')}
+              >
+                {t('retry', 'Retry')}
+              </button>
+            )}
             {(item.status === 'pending' || item.status === 'failed') && (
               <button
                 type="button"

@@ -37,6 +37,13 @@ export class PublicXController {
     return this._xNativeService.queue(org.id, query.days || 14);
   }
 
+  // before the extension fills X's composer: a post is claimed only once
+  @Post('/native/:id/claim')
+  nativeClaim(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
+    Sentry.metrics.count('public_api-request', 1);
+    return this._xNativeService.claim(org.id, id);
+  }
+
   @Post('/native/:id/result')
   nativeResult(
     @GetOrgFromRequest() org: Organization,

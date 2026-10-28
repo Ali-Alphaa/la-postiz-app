@@ -1091,5 +1091,9 @@
   "x_native_sync_hint": "sync it from the extension",
   "x_native_no_threads": "X can only schedule single posts from the web",
   "schedule_in_x": "Schedule in X (free, Premium)",
-  "x_native_add_post": "Add post"
+  "x_native_add_post": "Add post",
+  "x_native_needs_check": "Needs check — may already be in X's scheduler",
+  "x_native_syncing": "syncing to X…",
+  "x_native_its_in_x": "It's in X",
+  "retry": "Retry"
 }

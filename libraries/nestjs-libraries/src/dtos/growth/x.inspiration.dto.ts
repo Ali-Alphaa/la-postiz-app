@@ -291,6 +291,7 @@ export class XFetchSaveDto {
 // posts the extension puts into X's own scheduler (X Premium)
 export const X_NATIVE_STATUSES = [
   'pending',
+  'syncing',
   'synced',
   'failed',
   'cancelled',

@@ -10,6 +10,7 @@ const select = {
   scheduledAt: true,
   status: true,
   syncedAt: true,
+  claimedAt: true,
   error: true,
   sourceRepurposeId: true,
   createdAt: true,
@@ -100,8 +101,9 @@ export class XNativeRepository {
     });
   }
 
-  // only a post still waiting for the extension takes a result
-  setResult(orgId: string, id: string, ok: boolean, error?: string) {
+  // the extension takes a post right before filling X's composer: a post
+  // can only be claimed once, so it is never scheduled in X twice
+  claim(orgId: string, id: string) {
     return this._xNativeSchedule.model.xNativeSchedule.updateMany({
       where: {
         organizationId: orgId,
@@ -109,9 +111,38 @@ export class XNativeRepository {
         deletedAt: null,
         status: { in: ['pending', 'failed'] },
       },
+      data: { status: 'syncing', claimedAt: new Date(), error: null },
+    });
+  }
+
+  // only a claimed post takes a result
+  setResult(orgId: string, id: string, ok: boolean, error?: string) {
+    return this._xNativeSchedule.model.xNativeSchedule.updateMany({
+      where: { organizationId: orgId, id, deletedAt: null, status: 'syncing' },
       data: ok
         ? { status: 'synced', syncedAt: new Date(), error: null }
         : { status: 'failed', error: error || 'Failed' },
+    });
+  }
+
+  // the user checked X: the post is there
+  confirm(orgId: string, id: string) {
+    return this._xNativeSchedule.model.xNativeSchedule.updateMany({
+      where: { organizationId: orgId, id, deletedAt: null, status: 'syncing' },
+      data: { status: 'synced', syncedAt: new Date(), error: null },
+    });
+  }
+
+  // back to the queue
+  retry(orgId: string, id: string) {
+    return this._xNativeSchedule.model.xNativeSchedule.updateMany({
+      where: {
+        organizationId: orgId,
+        id,
+        deletedAt: null,
+        status: { in: ['syncing', 'failed'] },
+      },
+      data: { status: 'pending', claimedAt: null, error: null },
     });
   }
 }

@@ -389,15 +389,22 @@ function waitForTab(tabId: number) {
   });
 }
 
+// The content script may need a moment after the page loaded: a message
+// that never reached it is sent again. A message that reached it but got no
+// answer (the page navigated away) is NOT sent again: the post may already
+// be in X's scheduler, its claim stays open for the user to check.
 async function runInTab(
   tabId: number,
   message: Record<string, unknown>
-): Promise<NativeResult> {
-  // the content script may need a moment after the page loaded
+): Promise<NativeResult & { unknown?: boolean }> {
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      return await chrome.tabs.sendMessage(tabId, message);
-    } catch {
+      const result = await chrome.tabs.sendMessage(tabId, message);
+      return result || { ok: false, unknown: true, error: 'No answer from x.com' };
+    } catch (err) {
+      if (!/receiving end does not exist/i.test((err as Error)?.message || '')) {
+        return { ok: false, unknown: true, error: 'No answer from x.com' };
+      }
       await pause(1500);
     }
   }
@@ -415,6 +422,8 @@ async function nativeSync(dryRun: boolean) {
   const items: NativeItem[] = (queue.items || []).slice(0, MAX_ITEMS);
   let synced = 0;
   let failed = 0;
+  let skipped = 0;
+  let unknown = 0;
   await setRunState({ running: true, dryRun, done: 0, total: items.length, synced, failed });
 
   const [existing] = await chrome.tabs.query({ url: ['https://x.com/*'] });
@@ -426,6 +435,18 @@ async function nativeSync(dryRun: boolean) {
     if (nativeRun?.stop) {
       break;
     }
+    // a real sync takes the post first, so it can never be scheduled twice;
+    // a dry run touches nothing
+    if (!dryRun) {
+      const claim = await callPostiz(settings, `/x/native/${item.id}/claim`, {
+        method: 'POST',
+      });
+      if (!claim.ok) {
+        skipped++;
+        continue;
+      }
+    }
+
     await chrome.tabs.update(tab!.id!, { url: COMPOSE_URL });
     await waitForTab(tab!.id!);
     await pause(2000);
@@ -439,14 +460,22 @@ async function nativeSync(dryRun: boolean) {
     });
     if (result.ok) {
       synced++;
+    } else if (result.unknown) {
+      unknown++;
     } else {
       failed++;
     }
-    // a dry run changes nothing anywhere
-    if (!dryRun && result.error !== 'Stopped') {
+    // a dry run changes nothing anywhere; an unknown outcome keeps its claim
+    if (!dryRun && !result.unknown) {
       await callPostiz(settings, `/x/native/${item.id}/result`, {
         method: 'POST',
-        body: JSON.stringify({ ok: result.ok, error: result.error }),
+        body: JSON.stringify({
+          ok: result.ok,
+          error:
+            result.error === 'Stopped'
+              ? 'Stopped before scheduling'
+              : result.error,
+        }),
       });
     }
     await setRunState({
@@ -467,10 +496,12 @@ async function nativeSync(dryRun: boolean) {
   await setRunState({
     running: false,
     dryRun,
-    done: synced + failed,
+    done: synced + failed + unknown + skipped,
     total: items.length,
     synced,
     failed,
+    skipped,
+    unknown,
     stopped: !!nativeRun?.stop,
   });
   await refreshPending();

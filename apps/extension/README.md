@@ -110,7 +110,13 @@ extension puts them into X's scheduler **only when you click Sync**:
    clicks the composer button only if it says **Schedule**. If it would say
    "Post" (publish now), the post is skipped and reported as failed. A Stop
    button is shown on x.com while it runs.
-4. Each result goes back to Postiz (synced or failed). A synced post is
+4. Before touching a post, the extension claims it in Postiz (status
+   "syncing"), so a post can never be scheduled twice; a dry run claims
+   nothing. Each result goes back to Postiz (synced or failed). When the
+   outcome is unknown (the x.com tab stopped answering after the composer was
+   filled), the claim stays open and, after 15 minutes, Postiz shows the post
+   as "Needs check": look at X's scheduled posts and click "It's in X" or
+   "Retry". A synced post is
    managed in X from then on (x.com → composer → Unsent posts → Scheduled).
 
 Limits: text only (no media, no threads: X does not schedule threads from

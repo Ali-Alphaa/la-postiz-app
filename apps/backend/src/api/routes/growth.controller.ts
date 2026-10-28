@@ -367,6 +367,23 @@ export class GrowthController {
     return this._xNativeService.cancel(org.id, id);
   }
 
+  // a post the extension claimed without reporting back: the user checked X
+  @Post('/x/native/:id/confirm')
+  confirmXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._xNativeService.confirm(org.id, id);
+  }
+
+  @Post('/x/native/:id/retry')
+  retryXNative(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._xNativeService.retry(org.id, id);
+  }
+
   @Post('/x/repurpose/:id/native')
   nativeXRepurpose(
     @GetOrgFromRequest() org: Organization,

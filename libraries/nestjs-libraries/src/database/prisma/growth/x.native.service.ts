@@ -18,6 +18,8 @@ import { weightedLength } from '@gitroom/helpers/utils/count.length';
 // The queue of posts the browser extension puts into X's own scheduler
 // (X Premium web composer), when the user clicks "Sync" in the extension.
 // X publishes them; Postiz never posts these.
+const STALE_CLAIM_MS = 15 * 60 * 1000;
+
 @Injectable()
 export class XNativeService {
   constructor(
@@ -32,8 +34,17 @@ export class XNativeService {
     }
   }
 
-  list(orgId: string, status?: XNativeStatus) {
-    return this._xNativeRepository.list(orgId, status);
+  // a claim with no result for 15 minutes: the post may or may not be in
+  // X's scheduler, the user checks
+  async list(orgId: string, status?: XNativeStatus) {
+    const stale = Date.now() - STALE_CLAIM_MS;
+    return (await this._xNativeRepository.list(orgId, status)).map((p) => ({
+      ...p,
+      needsCheck:
+        p.status === 'syncing' &&
+        !!p.claimedAt &&
+        p.claimedAt.getTime() < stale,
+    }));
   }
 
   async create(orgId: string, body: XNativeDto, sourceRepurposeId?: string) {
@@ -56,6 +67,8 @@ export class XNativeService {
       throw new BadRequestException(
         item.status === 'synced'
           ? 'This post is already in X: change it in the scheduled posts of X'
+          : item.status === 'syncing'
+          ? 'This post is being synced to X right now'
           : 'This post was cancelled'
       );
     }
@@ -128,5 +141,31 @@ export class XNativeService {
       throw new NotFoundException('Scheduled post not found');
     }
     return { id, status: body.ok ? 'synced' : 'failed' };
+  }
+
+  async claim(orgId: string, id: string) {
+    const { count } = await this._xNativeRepository.claim(orgId, id);
+    if (!count) {
+      throw new BadRequestException(
+        'This post is not waiting for the X scheduler anymore'
+      );
+    }
+    return { id, status: 'syncing' };
+  }
+
+  async confirm(orgId: string, id: string) {
+    const { count } = await this._xNativeRepository.confirm(orgId, id);
+    if (!count) {
+      throw new NotFoundException('Scheduled post not found');
+    }
+    return { id, status: 'synced' };
+  }
+
+  async retry(orgId: string, id: string) {
+    const { count } = await this._xNativeRepository.retry(orgId, id);
+    if (!count) {
+      throw new NotFoundException('Scheduled post not found');
+    }
+    return { id, status: 'pending' };
   }
 }

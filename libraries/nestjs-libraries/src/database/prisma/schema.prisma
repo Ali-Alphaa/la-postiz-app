@@ -785,7 +785,8 @@ model XFetcherUsage {
 
 // Posts the browser extension puts into X's own scheduler (X Premium web
 // composer), on the user's click. Nothing is published from Postiz.
-// status: pending, synced, failed, cancelled
+// status: pending, syncing (claimed by the extension), synced, failed,
+// cancelled
 model XNativeSchedule {
   id                String       @id @default(uuid())
   organizationId    String
@@ -793,6 +794,8 @@ model XNativeSchedule {
   scheduledAt       DateTime
   status            String       @default("pending")
   syncedAt          DateTime?
+  // when the extension claimed it, right before filling X's composer
+  claimedAt         DateTime?
   error             String?
   sourceRepurposeId String?
   createdAt         DateTime     @default(now())
