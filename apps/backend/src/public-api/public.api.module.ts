@@ -11,8 +11,12 @@ import { CodesService } from '@gitroom/nestjs-libraries/services/codes.service';
 import { PublicIntegrationsController } from '@gitroom/backend/public-api/routes/v1/public.integrations.controller';
 import { PublicAuthMiddleware } from '@gitroom/backend/services/auth/public.auth.middleware';
 import { SuperAdminGuard } from '@gitroom/backend/services/auth/super.admin.guard';
+import { PublicXController } from '@gitroom/backend/public-api/routes/v1/public.x.controller';
 
-const authenticatedController = [PublicIntegrationsController];
+const authenticatedController = [
+  PublicIntegrationsController,
+  PublicXController,
+];
 @Module({
   imports: [UploadModule],
   controllers: process.env.MCP_ONLY ? [] : [...authenticatedController],

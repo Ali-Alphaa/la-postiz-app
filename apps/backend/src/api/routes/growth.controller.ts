@@ -31,6 +31,12 @@ import {
   CompetitorDto,
   InspirationQueryDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/competitor.dto';
+import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
+import {
+  XLibraryQueryDto,
+  XRewriteDto,
+  XVoiceDto,
+} from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
 
 @ApiTags('Growth')
 @Controller('/growth')
@@ -38,7 +44,8 @@ export class GrowthController {
   constructor(
     private _growthService: GrowthService,
     private _growthSettingsService: GrowthSettingsService,
-    private _competitorsService: CompetitorsService
+    private _competitorsService: CompetitorsService,
+    private _xInspirationService: XInspirationService
   ) {}
 
   @Get('/settings')
@@ -199,5 +206,59 @@ export class GrowthController {
     @Param('id') id: string
   ) {
     return this._competitorsService.rewrite(org.id, id);
+  }
+
+  // X viral library, filled by the browser extension (public API)
+  @Get('/x/status')
+  getXStatus(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.getStatus(org.id);
+  }
+
+  @Get('/x/library')
+  getXLibrary(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: XLibraryQueryDto
+  ) {
+    return this._xInspirationService.getLibrary(org.id, query);
+  }
+
+  @Delete('/x/library/:id')
+  hideXTweet(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
+    return this._xInspirationService.hideTweet(org.id, id);
+  }
+
+  @Post('/x/library/analyze')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  analyzeXLibrary(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.analyzeNow(org.id);
+  }
+
+  @Post('/x/library/:id/rewrite')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  rewriteXTweet(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XRewriteDto
+  ) {
+    return this._xInspirationService.rewrite(org.id, id, body.format);
+  }
+
+  @Get('/x/voice')
+  getXVoice(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.getVoice(org.id);
+  }
+
+  @Put('/x/voice')
+  updateXVoice(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XVoiceDto
+  ) {
+    return this._xInspirationService.updateVoice(org.id, body.styleGuide);
+  }
+
+  @Post('/x/voice/generate')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  generateXVoice(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.generateVoice(org.id);
   }
 }

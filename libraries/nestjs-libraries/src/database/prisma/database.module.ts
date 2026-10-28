@@ -55,6 +55,9 @@ import { GrowthSettingsService } from '@gitroom/nestjs-libraries/database/prisma
 import { GrowthService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.service';
 import { CompetitorsRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/competitors.repository';
 import { CompetitorsService } from '@gitroom/nestjs-libraries/database/prisma/growth/competitors.service';
+import { XInspirationRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.repository';
+import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
+import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
 
 @Global()
 @Module({
@@ -119,6 +122,9 @@ import { CompetitorsService } from '@gitroom/nestjs-libraries/database/prisma/gr
     GrowthService,
     CompetitorsRepository,
     CompetitorsService,
+    AnthropicService,
+    XInspirationRepository,
+    XInspirationService,
   ],
   get exports() {
     return this.providers;
