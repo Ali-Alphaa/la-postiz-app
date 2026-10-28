@@ -119,6 +119,13 @@ extension puts them into X's scheduler **only when you click Sync**:
    "Retry". A synced post is
    managed in X from then on (x.com → composer → Unsent posts → Scheduled).
 
+Several X accounts: a queued post can be for one account (picked in
+Postiz). The extension reads which account is signed in on x.com and only
+syncs the posts of that account (and the posts with no account); the others
+are left in the queue, unclaimed, with "N posts skipped — switch x.com to
+@handle and sync again". Your own tweets also only feed the voice of the
+account you are browsing as (Growth → X: My voice, one voice per account).
+
 Limits: text only (no media, no threads: X does not schedule threads from
 the web), up to 280 characters, at least 10 minutes and at most 18 months
 ahead; use X in English while syncing (the button label is checked); Chrome

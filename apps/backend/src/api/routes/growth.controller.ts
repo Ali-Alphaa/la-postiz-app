@@ -34,6 +34,7 @@ import {
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
+import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.service';
 import {
   XFetchSaveDto,
   XFetchSearchDto,
@@ -59,7 +60,8 @@ export class GrowthController {
     private _competitorsService: CompetitorsService,
     private _xInspirationService: XInspirationService,
     private _xFetcherService: XFetcherService,
-    private _xNativeService: XNativeService
+    private _xNativeService: XNativeService,
+    private _xVoiceService: XVoiceService
   ) {}
 
   @Get('/settings')
@@ -262,12 +264,45 @@ export class GrowthController {
     @Param('id') id: string,
     @Body() body: XRewriteDto
   ) {
-    return this._xInspirationService.rewrite(org.id, id, body.format);
+    return this._xInspirationService.rewrite(org.id, id, body);
   }
 
+  // one voice per X account
+  @Get('/x/voices')
+  getXVoices(@GetOrgFromRequest() org: Organization) {
+    return this._xVoiceService.list(org.id);
+  }
+
+  @Get('/x/voices/:handle')
+  getXVoiceByHandle(
+    @GetOrgFromRequest() org: Organization,
+    @Param('handle') handle: string
+  ) {
+    return this._xVoiceService.get(org.id, handle);
+  }
+
+  @Put('/x/voices/:handle')
+  updateXVoiceByHandle(
+    @GetOrgFromRequest() org: Organization,
+    @Param('handle') handle: string,
+    @Body() body: XVoiceDto
+  ) {
+    return this._xVoiceService.update(org.id, handle, body.styleGuide);
+  }
+
+  @Post('/x/voices/:handle/generate')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  generateXVoiceByHandle(
+    @GetOrgFromRequest() org: Organization,
+    @Param('handle') handle: string
+  ) {
+    return this._xVoiceService.generate(org.id, handle);
+  }
+
+  // before voices were per account: the voice of the first X channel
   @Get('/x/voice')
   getXVoice(@GetOrgFromRequest() org: Organization) {
-    return this._xInspirationService.getVoice(org.id);
+    return this._xVoiceService.getLegacy(org.id);
   }
 
   @Put('/x/voice')
@@ -275,13 +310,13 @@ export class GrowthController {
     @GetOrgFromRequest() org: Organization,
     @Body() body: XVoiceDto
   ) {
-    return this._xInspirationService.updateVoice(org.id, body.styleGuide);
+    return this._xVoiceService.updateLegacy(org.id, body.styleGuide);
   }
 
   @Post('/x/voice/generate')
   @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   generateXVoice(@GetOrgFromRequest() org: Organization) {
-    return this._xInspirationService.generateVoice(org.id);
+    return this._xVoiceService.generateLegacy(org.id);
   }
 
   @Post('/x/repurpose')

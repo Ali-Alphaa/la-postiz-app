@@ -13,6 +13,7 @@ const select = {
   claimedAt: true,
   error: true,
   sourceRepurposeId: true,
+  handle: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -43,7 +44,12 @@ export class XNativeRepository {
 
   create(
     orgId: string,
-    data: { text: string; scheduledAt: Date; sourceRepurposeId?: string }
+    data: {
+      text: string;
+      scheduledAt: Date;
+      sourceRepurposeId?: string;
+      handle?: string | null;
+    }
   ) {
     return this._xNativeSchedule.model.xNativeSchedule.create({
       data: { organizationId: orgId, ...data },
@@ -84,7 +90,7 @@ export class XNativeRepository {
         status: 'pending',
         scheduledAt: { gt: from, lte: to },
       },
-      select: { id: true, text: true, scheduledAt: true },
+      select: { id: true, text: true, scheduledAt: true, handle: true },
       orderBy: { scheduledAt: 'asc' },
       take: QUEUE_SIZE,
     });

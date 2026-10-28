@@ -3,6 +3,7 @@ import {
   bestVoiceSamples,
   likesRatio,
   nativeScheduleError,
+  normalizeVoiceHandle,
   normalizeVariations,
   oembedHtmlToTweet,
   parseTweetUrl,
@@ -304,5 +305,13 @@ describe('nativeScheduleError', () => {
     expect(
       nativeScheduleError('漢'.repeat(140), at(60), weightedLength, now)
     ).toBeNull();
+  });
+});
+
+describe('normalizeVoiceHandle', () => {
+  it('lowercases and strips @', () => {
+    expect(normalizeVoiceHandle(' @Sigma_Trader ')).toBe('sigma_trader');
+    expect(normalizeVoiceHandle('bad handle')).toBeNull();
+    expect(normalizeVoiceHandle(null)).toBeNull();
   });
 });

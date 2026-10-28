@@ -21,7 +21,8 @@ import {
   useGrowthIntegrations,
   useXLibrary,
   useXStatus,
-  useXVoice,
+  useXVoiceDetail,
+  useXVoices,
   XLibraryFilters,
 } from '@gitroom/frontend/components/growth/growth.hooks';
 import {
@@ -403,6 +404,10 @@ const Drafts: FC<{
             index,
             text: drafts[index][0],
             scheduledAt: newDayjs(dates[index]).utc().toISOString(),
+            // the X account of the chosen channel
+            ...(channels.find((p) => p.id === channel)?.display
+              ? { handle: channels.find((p) => p.id === channel)!.display }
+              : {}),
           }),
         }
       );
@@ -429,7 +434,7 @@ const Drafts: FC<{
       );
       onNativeQueued?.();
     },
-    [repurposeId, drafts, dates]
+    [repurposeId, drafts, dates, channel, channels]
   );
 
   return (
@@ -685,6 +690,54 @@ const TweetCard: FC<{
   );
 };
 
+// The voice used by "Rewrite in my voice" and "Use my voice": by default the
+// account of the X channel posts go to (the first one)
+const VoiceSelect: FC<{
+  value: string;
+  onChange: (handle: string) => void;
+}> = ({ value, onChange }) => {
+  const t = useT();
+  const { data: voices } = useXVoices();
+  const channels = useXChannels();
+  const list = (voices || []).filter((p: any) => p.hasVoice);
+
+  useEffect(() => {
+    if (value || !list.length) {
+      return;
+    }
+    const channelHandle = channels[0]?.display?.toLowerCase();
+    const match =
+      list.find((p: any) => p.handle === channelHandle) ||
+      list.find((p: any) => p.hasGuide) ||
+      list[0];
+    onChange(match.handle);
+  }, [list.length, channels.length, value]);
+
+  if (!list.length) {
+    return null;
+  }
+
+  return (
+    <div className="w-[180px]">
+      <Select
+        label=""
+        name="voice"
+        disableForm={true}
+        hideErrors={true}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {list.map((voice: any) => (
+          <option key={voice.handle} value={voice.handle}>
+            {t('voice_of', 'Voice: @{{handle}}', { handle: voice.handle })}
+            {voice.hasGuide ? '' : ` (${t('no_guide', 'no guide')})`}
+          </option>
+        ))}
+      </Select>
+    </div>
+  );
+};
+
 export const XInspiration: FC = () => {
   const t = useT();
   const fetch = useFetch();
@@ -695,6 +748,7 @@ export const XInspiration: FC = () => {
   const [selected, setSelected] = useState<string[]>([]);
   const [format, setFormat] = useState<'single' | 'thread'>('single');
   const [useMyVoice, setUseMyVoice] = useState(false);
+  const [voiceHandle, setVoiceHandle] = useState('');
   const [busy, setBusy] = useState('');
   const [drafts, setDrafts] = useState<{
     title: string;
@@ -765,7 +819,10 @@ export const XInspiration: FC = () => {
       setBusy(`rewrite-${tweet.id}`);
       const response = await fetch(`/growth/x/library/${tweet.id}/rewrite`, {
         method: 'POST',
-        body: JSON.stringify({ format }),
+        body: JSON.stringify({
+          format,
+          ...(voiceHandle ? { voiceHandle } : {}),
+        }),
       });
       setBusy('');
       if (!response.ok) {
@@ -786,14 +843,19 @@ export const XInspiration: FC = () => {
       });
       window.scrollTo({ top: 0, behavior: 'smooth' });
     },
-    [format]
+    [format, voiceHandle]
   );
 
   const repurpose = useCallback(async () => {
     setBusy('repurpose');
     const response = await fetch('/growth/x/repurpose', {
       method: 'POST',
-      body: JSON.stringify({ tweetIds: selected, format, useMyVoice }),
+      body: JSON.stringify({
+        tweetIds: selected,
+        format,
+        useMyVoice,
+        ...(useMyVoice && voiceHandle ? { voiceHandle } : {}),
+      }),
     });
     setBusy('');
     if (!response.ok) {
@@ -810,7 +872,7 @@ export const XInspiration: FC = () => {
       drafts: result.variations,
       repurposeId: result.id,
     });
-  }, [selected, format, useMyVoice]);
+  }, [selected, format, useMyVoice, voiceHandle]);
 
   const hide = useCallback(
     (id: string) => async () => {
@@ -1042,6 +1104,7 @@ export const XInspiration: FC = () => {
           />
           {t('use_my_voice', 'Use my voice instead of the source tone')}
         </label>
+        <VoiceSelect value={voiceHandle} onChange={setVoiceHandle} />
         <Button
           onClick={repurpose}
           loading={busy === 'repurpose'}
@@ -1114,57 +1177,86 @@ export const XInspiration: FC = () => {
   );
 };
 
+// the X account a voice belongs to, as a chip
+const AccountChip: FC<{
+  voice: any;
+  selected: boolean;
+  onClick: () => void;
+}> = ({ voice, selected, onClick }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={clsx(
+      'flex items-center gap-[6px] text-[13px] px-[10px] py-[4px] rounded-full border',
+      selected ? 'border-[#612BD3] bg-boxHover' : 'border-newTableBorder'
+    )}
+  >
+    {!!voice.integration?.picture && (
+      <img
+        src={voice.integration.picture}
+        className="w-[20px] h-[20px] rounded-full"
+        alt=""
+      />
+    )}
+    @{voice.handle}
+  </button>
+);
+
 export const XVoice: FC = () => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
   const aiError = useAiError();
-  const { data, mutate } = useXVoice();
+  const { data: voices, mutate: mutateList } = useXVoices();
+  const [handle, setHandle] = useState('');
+  const { data, mutate } = useXVoiceDetail(handle);
   const [styleGuide, setStyleGuide] = useState('');
   const [busy, setBusy] = useState('');
 
+  // the first account by default
   useEffect(() => {
-    if (data) {
-      setStyleGuide(data.styleGuide || '');
+    if (!handle && voices?.length) {
+      setHandle(voices[0].handle);
     }
+  }, [voices, handle]);
+
+  useEffect(() => {
+    setStyleGuide(data?.styleGuide || '');
   }, [data]);
+
+  const failed = useCallback(async (response: Response) => {
+    toaster.show(
+      await errorMessage(
+        response,
+        t('something_went_wrong', 'Something went wrong')
+      ),
+      'warning'
+    );
+  }, []);
 
   const save = useCallback(async () => {
     setBusy('save');
-    const response = await fetch('/growth/x/voice', {
+    const response = await fetch(`/growth/x/voices/${handle}`, {
       method: 'PUT',
       body: JSON.stringify({ styleGuide }),
     });
     setBusy('');
     if (!response.ok) {
-      toaster.show(
-        await errorMessage(
-          response,
-          t('something_went_wrong', 'Something went wrong')
-        ),
-        'warning'
-      );
-      return;
+      return failed(response);
     }
     toaster.show(t('saved', 'Saved'), 'success');
     mutate();
-  }, [styleGuide]);
+    mutateList();
+  }, [handle, styleGuide]);
 
   const regenerate = useCallback(async () => {
     setBusy('generate');
-    const response = await fetch('/growth/x/voice/generate', {
+    const response = await fetch(`/growth/x/voices/${handle}/generate`, {
       method: 'POST',
     });
     setBusy('');
     if (!response.ok) {
-      toaster.show(
-        await errorMessage(
-          response,
-          t('something_went_wrong', 'Something went wrong')
-        ),
-        'warning'
-      );
-      return;
+      return failed(response);
     }
     const result = await response.json();
     const message = aiError(result);
@@ -1174,59 +1266,90 @@ export const XVoice: FC = () => {
     }
     setStyleGuide(result.styleGuide);
     mutate();
-  }, []);
+    mutateList();
+  }, [handle]);
 
   return (
     <GrowthSection
       title={t('my_voice', 'My voice')}
       description={t(
-        'my_voice_description',
-        'Open your own X profile with the Postiz extension installed: your tweets are collected here and Claude writes a style guide from the best performing ones. "Rewrite in my voice" follows this guide; edit it as you like.'
+        'my_voice_per_account_description',
+        'One voice per X account. Open the x.com profile of an account while logged in as that account, with the Postiz extension installed: its tweets are collected here and Claude writes a style guide from the best performing ones. "Rewrite in my voice" follows the guide of the account you pick; edit it as you like.'
       )}
     >
       {data && !data.aiAvailable && <AiWarning />}
-      <GrowthCard className="flex flex-col gap-[12px]">
-        <div className="text-[14px] text-newTextColor/80">
-          {t('voice_samples', '{{count}} of your tweets collected', {
-            count: data?.sampleCount || 0,
-          })}
-          {data?.handle ? ` (@${data.handle})` : ''}
-          {data?.generatedAt
-            ? ` · ${t('generated_at', 'generated')} ${fromUtc(
-                data.generatedAt
-              ).format('DD/MM/YYYY HH:mm')}`
-            : ''}
+      {voices && !voices.length ? (
+        <GrowthCard className="text-[13px] text-newTextColor/60">
+          {t(
+            'no_voices',
+            'No X account yet: connect an X channel, or open your x.com profile with the extension installed'
+          )}
+        </GrowthCard>
+      ) : (
+        <div className="flex gap-[8px] flex-wrap">
+          {(voices || []).map((voice: any) => (
+            <AccountChip
+              key={voice.handle}
+              voice={voice}
+              selected={voice.handle === handle}
+              onClick={() => setHandle(voice.handle)}
+            />
+          ))}
         </div>
-        <Textarea
-          label={t('style_guide', 'Style guide')}
-          name="styleGuide"
-          disableForm={true}
-          value={styleGuide}
-          className="min-h-[360px]"
-          onChange={(e) => setStyleGuide(e.target.value)}
-        />
-        <div className="flex gap-[8px]">
-          <Button
-            onClick={save}
-            loading={busy === 'save'}
-            disabled={styleGuide === (data?.styleGuide || '')}
-          >
-            {t('save', 'Save')}
-          </Button>
-          <Button
-            secondary={true}
-            onClick={regenerate}
-            loading={busy === 'generate'}
-            disabled={!data?.aiAvailable || (data?.sampleCount || 0) < 5}
-          >
-            {t('regenerate', 'Regenerate with Claude')}
-          </Button>
-        </div>
-      </GrowthCard>
+      )}
+      {!!handle && data && !data.sampleCount && (
+        <GrowthCard className="text-[13px] text-newTextColor/70">
+          {t(
+            'x_voice_collect_hint',
+            'Open your x.com profile while logged in as @{{handle}} to collect samples',
+            { handle }
+          )}
+        </GrowthCard>
+      )}
+      {!!handle && (
+        <GrowthCard className="flex flex-col gap-[12px]">
+          <div className="text-[14px] text-newTextColor/80">
+            @{handle} ·{' '}
+            {t('voice_samples_of', '{{count}} tweets collected', {
+              count: data?.sampleCount || 0,
+            })}
+            {data?.generatedAt
+              ? ` · ${t('generated_at', 'generated')} ${fromUtc(
+                  data.generatedAt
+                ).format('DD/MM/YYYY HH:mm')}`
+              : ''}
+          </div>
+          <Textarea
+            label={t('style_guide', 'Style guide')}
+            name="styleGuide"
+            disableForm={true}
+            value={styleGuide}
+            className="min-h-[360px]"
+            onChange={(e) => setStyleGuide(e.target.value)}
+          />
+          <div className="flex gap-[8px]">
+            <Button
+              onClick={save}
+              loading={busy === 'save'}
+              disabled={styleGuide === (data?.styleGuide || '')}
+            >
+              {t('save', 'Save')}
+            </Button>
+            <Button
+              secondary={true}
+              onClick={regenerate}
+              loading={busy === 'generate'}
+              disabled={!data?.aiAvailable || (data?.sampleCount || 0) < 5}
+            >
+              {t('regenerate', 'Regenerate with Claude')}
+            </Button>
+          </div>
+        </GrowthCard>
+      )}
       {!!data?.best?.length && (
         <GrowthCard className="flex flex-col gap-[8px]">
           <div className="text-[14px] font-[500]">
-            {t('best_tweets', 'Your best tweets')}
+            {t('best_tweets_of', 'Best tweets of @{{handle}}', { handle })}
           </div>
           {data.best.map((tweet: any) => (
             <div

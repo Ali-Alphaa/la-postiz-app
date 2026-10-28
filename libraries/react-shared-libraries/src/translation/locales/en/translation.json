@@ -1095,5 +1095,13 @@
   "x_native_needs_check": "Needs check — may already be in X's scheduler",
   "x_native_syncing": "syncing to X…",
   "x_native_its_in_x": "It's in X",
-  "retry": "Retry"
+  "retry": "Retry",
+  "x_account": "X account",
+  "voice_of": "Voice: @{{handle}}",
+  "no_guide": "no guide",
+  "my_voice_per_account_description": "One voice per X account. Open the x.com profile of an account while logged in as that account, with the Postiz extension installed: its tweets are collected here and Claude writes a style guide from the best performing ones. \"Rewrite in my voice\" follows the guide of the account you pick; edit it as you like.",
+  "no_voices": "No X account yet: connect an X channel, or open your x.com profile with the extension installed",
+  "x_voice_collect_hint": "Open your x.com profile while logged in as @{{handle}} to collect samples",
+  "voice_samples_of": "{{count}} tweets collected",
+  "best_tweets_of": "Best tweets of @{{handle}}"
 }

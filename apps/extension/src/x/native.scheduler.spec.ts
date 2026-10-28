@@ -9,6 +9,8 @@ import {
   scheduleOne,
   scheduleSelects,
   scheduleValues,
+  splitByAccount,
+  wrongAccountMessage,
 } from './native.scheduler';
 import { badgeFor } from './badge';
 import { composerHtml, scheduleDialogHtml } from './__fixtures__/composer';
@@ -277,5 +279,42 @@ describe('badgeFor', () => {
     });
     expect(badgeFor({ pending: 0, savedToday: 0 }).text).toBe('');
     expect(badgeFor({ pending: 120, savedToday: 0 }).text).toBe('99+');
+  });
+});
+
+describe('splitByAccount', () => {
+  const post = (id: string, handle?: string | null) => ({
+    id,
+    text: id,
+    scheduledAt: '2026-11-01T10:00:00Z',
+    handle,
+  });
+
+  it('keeps the posts of the signed-in account and those without account', () => {
+    const split = splitByAccount(
+      [
+        post('a', 'sigma'),
+        post('b', 'other_acc'),
+        post('c'),
+        post('d', 'other_acc'),
+        post('e', 'third'),
+      ],
+      'Sigma'
+    );
+    expect(split.run.map((p) => p.id)).toEqual(['a', 'c']);
+    expect(split.skipped).toBe(3);
+    expect(split.handles).toEqual(['other_acc', 'third']);
+    expect(wrongAccountMessage(split.skipped, split.handles)).toBe(
+      '3 posts skipped — switch x.com to @other_acc or @third and sync again'
+    );
+    expect(wrongAccountMessage(0, [])).toBe('');
+  });
+
+  it('skips every post with an account when nobody is signed in', () => {
+    const split = splitByAccount([post('a', 'sigma'), post('b', null)], null);
+    expect(split.run.map((p) => p.id)).toEqual(['b']);
+    expect(wrongAccountMessage(split.skipped, split.handles)).toBe(
+      '1 post skipped — switch x.com to @sigma and sync again'
+    );
   });
 });

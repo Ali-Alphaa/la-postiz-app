@@ -210,20 +210,26 @@ const showOverlay = (text: string) => {
 };
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id === chrome.runtime.id && message?.type === 'X_WHO_AM_I') {
+    sendResponse(getOwnHandle(document));
+    return false;
+  }
   if (sender.id !== chrome.runtime.id || message?.type !== 'X_NATIVE_RUN_ONE') {
     return false;
   }
-  const { item, dryRun, index, total } = message as {
+  const { item, dryRun, index, total, wrongAccount } = message as {
     item: NativeItem;
     dryRun: boolean;
     index: number;
     total: number;
+    wrongAccount?: string;
   };
+  const note = wrongAccount ? ` · ${wrongAccount}` : '';
   stopRequested = false;
   showOverlay(
     `Postiz${dryRun ? ' (dry run)' : ''}: scheduling ${
       index + 1
-    } of ${total} in X…`
+    } of ${total} in X…${note}`
   );
   scheduleOne(document, item, {
     dryRun,
@@ -231,11 +237,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })
     .then((result) => {
       showOverlay(
-        result.ok
+        (result.ok
           ? result.dryRun
             ? `Dry run ${index + 1} of ${total}: ready, not scheduled`
             : `Scheduled ${index + 1} of ${total} in X`
-          : `Not scheduled: ${result.error}`
+          : `Not scheduled: ${result.error}`) + note
       );
       sendResponse(result);
     })

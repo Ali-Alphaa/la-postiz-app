@@ -16,8 +16,10 @@ import {
 } from '@gitroom/frontend/components/layout/set.timezone';
 import {
   errorMessage,
+  useGrowthIntegrations,
   useXNative,
 } from '@gitroom/frontend/components/growth/growth.hooks';
+import { Select } from '@gitroom/react/form/select';
 import { GrowthCard } from '@gitroom/frontend/components/growth/channel.select';
 
 const MAX_LENGTH = 280;
@@ -31,6 +33,14 @@ const STATUS_CLASS: Record<string, string> = {
   cancelled: 'border border-newTableBorder text-newTextColor/60',
 };
 
+// the handles of the connected X accounts
+const useXHandles = () => {
+  const { data } = useGrowthIntegrations();
+  return (data || [])
+    .filter((p) => p.identifier === 'x' && !p.disabled && p.display)
+    .map((p) => p.display!.toLowerCase());
+};
+
 const NativeForm: FC<{
   initial?: { id: string; text: string; scheduledAt: string };
   onDone: () => void;
@@ -38,6 +48,8 @@ const NativeForm: FC<{
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
+  const handles = useXHandles();
+  const [handle, setHandle] = useState('');
   const [text, setText] = useState(initial?.text || '');
   const [date, setDate] = useState(
     initial ? fromUtc(initial.scheduledAt).format('YYYY-MM-DDTHH:mm') : ''
@@ -55,6 +67,10 @@ const NativeForm: FC<{
           text,
           // the picker is in the timezone of the user
           scheduledAt: newDayjs(date).utc().toISOString(),
+          // the account, with 2+ X accounts (new posts only)
+          ...(!initial && (handle || handles.length === 1)
+            ? { handle: handle || handles[0] }
+            : {}),
         }),
       }
     );
@@ -71,7 +87,7 @@ const NativeForm: FC<{
     }
     toaster.show(t('saved', 'Saved'), 'success');
     onDone();
-  }, [text, date, initial]);
+  }, [text, date, initial, handle, handles.length]);
 
   return (
     <div className="flex flex-col gap-[8px] border border-newTableBorder rounded-[8px] p-[12px]">
@@ -102,10 +118,34 @@ const NativeForm: FC<{
             onChange={(e) => setDate(e.target.value)}
           />
         </div>
+        {!initial && handles.length > 1 && (
+          <div className="w-[200px]">
+            <Select
+              label={t('x_account', 'X account')}
+              name="nativeHandle"
+              disableForm={true}
+              hideErrors={true}
+              value={handle}
+              onChange={(e) => setHandle(e.target.value)}
+            >
+              <option value="">{t('select', 'Select')}</option>
+              {handles.map((p) => (
+                <option key={p} value={p}>
+                  @{p}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
         <Button
           onClick={save}
           loading={saving}
-          disabled={!text.trim() || !date || length > MAX_LENGTH}
+          disabled={
+            !text.trim() ||
+            !date ||
+            length > MAX_LENGTH ||
+            (!initial && handles.length > 1 && !handle)
+          }
         >
           {initial ? t('save', 'Save') : t('add_to_queue', 'Add to queue')}
         </Button>
@@ -257,6 +297,7 @@ export const XNativeScheduler: FC = () => {
                 </span>
                 <span className="text-newTextColor/70">
                   {fromUtc(item.scheduledAt).format('DD/MM/YYYY HH:mm')}
+                  {item.handle ? ` · @${item.handle}` : ''}
                 </span>
               </div>
               <div className="text-[14px] whitespace-pre-wrap break-words">
