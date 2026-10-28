@@ -15,6 +15,10 @@ import {
   Competitors,
   Inspiration,
 } from '@gitroom/frontend/components/growth/competitors';
+import {
+  XInspiration,
+  XVoice,
+} from '@gitroom/frontend/components/growth/x.inspiration';
 
 export const GrowthComponent: FC = () => {
   const t = useT();
@@ -35,6 +39,8 @@ export const GrowthComponent: FC = () => {
       { tab: 'ab_tests', label: t('ab_tests', 'A/B tests') },
       { tab: 'competitors', label: t('competitors', 'Competitors') },
       { tab: 'inspiration', label: t('inspiration', 'Inspiration') },
+      { tab: 'x_inspiration', label: t('x_inspiration', 'X Inspiration') },
+      { tab: 'x_voice', label: t('x_my_voice', 'X: My voice') },
     ],
     [t]
   );
@@ -78,6 +84,8 @@ export const GrowthComponent: FC = () => {
         {tab === 'ab_tests' && <AbTests />}
         {tab === 'competitors' && <Competitors />}
         {tab === 'inspiration' && <Inspiration />}
+        {tab === 'x_inspiration' && <XInspiration />}
+        {tab === 'x_voice' && <XVoice />}
       </div>
     </>
   );

@@ -51,6 +51,11 @@ model Organization {
   postRecycles        PostRecycle[]
   abExperiments       AbExperiment[]
   competitors         Competitor[]
+  xAuthorBaselines    XAuthorBaseline[]
+  xViralTweets        XViralTweet[]
+  xVoiceProfile       XVoiceProfile?
+  xRepurposes         XRepurpose[]
+  xFetcherUsages      XFetcherUsage[]
 
   @@index([apiKey])
   @@index([streakSince])
@@ -682,6 +687,99 @@ model CompetitorPost {
 
   @@unique([competitorId, externalId])
   @@index([engagement])
+}
+
+// What an X author usually gets, learned from the tweets the user scrolled
+// past (sent by the browser extension). samples: [{ id, likes }] (max 30),
+// pending: tweets big enough to be viral that wait for more samples (max 10)
+model XAuthorBaseline {
+  id             String       @id @default(uuid())
+  organizationId String
+  handle         String
+  samples        Json         @default("[]")
+  pending        Json         @default("[]")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, handle])
+}
+
+// The viral library: tweets that did much better than their author's usual
+model XViralTweet {
+  id             String       @id @default(uuid())
+  organizationId String
+  tweetId        String
+  url            String
+  authorHandle   String
+  authorName     String?
+  text           String
+  likes          Int          @default(0)
+  reposts        Int          @default(0)
+  replies        Int          @default(0)
+  views          Int?
+  mediaType      String       @default("none")
+  postedAt       DateTime?
+  // likes / median likes of the author
+  ratio          Float        @default(0)
+  topics         String[]     @default([])
+  hookType       String?
+  format         String?
+  onNiche        Boolean?
+  analyzedAt     DateTime?
+  // auto: captured because it was viral, manual: saved by the user,
+  // fetch: collected with the X fetcher and saved by the user
+  source         String       @default("auto")
+  capturedAt     DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, tweetId])
+  @@index([organizationId, capturedAt])
+  @@index([analyzedAt])
+}
+
+// The user's own tweets and the style guide written from them
+model XVoiceProfile {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  handle         String?
+  samples        Json         @default("[]")
+  styleGuide     String?      @db.Text
+  generatedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// Saved tweets repurposed into variations, and the one the user posted
+model XRepurpose {
+  id             String       @id @default(uuid())
+  organizationId String
+  sourceTweetIds String[]
+  variations     Json         @default("[]")
+  chosenIndex    Int?
+  postId         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+}
+
+// Requests the X fetcher made to x.com for an organization, per UTC day
+model XFetcherUsage {
+  id             String       @id @default(uuid())
+  organizationId String
+  // YYYY-MM-DD, UTC
+  day            String
+  count          Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, day])
 }
 
 model Notifications {

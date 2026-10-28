@@ -20,7 +20,9 @@ export const baseManifest = {
   host_permissions: [
     import.meta.env?.FRONTEND_URL || process?.env?.FRONTEND_URL + '/*',
     (import.meta.env?.NEXT_PUBLIC_BACKEND_URL || process?.env?.NEXT_PUBLIC_BACKEND_URL || '') + '/*',
-    ...providers.map(p => p.hostPermission)
+    ...providers.map(p => p.hostPermission),
+    // x.com, twitter.com and the default Postiz domain
+    ...manifest.host_permissions.filter((p) => !p.includes('skool.com')),
   ],
   permissions: [...(manifest.permissions || [])],
   version: pkg.version,

@@ -1,6 +1,8 @@
 import { ExtensionRequest, GetCookiesResponse, ProviderInfo, StoredRefreshEntry } from './types/messages';
 import { getAllProviders, getProvider } from './providers/provider.registry';
 import { CookieProvider } from './providers/cookie-provider.interface';
+import { XInternalRequest } from './types/messages';
+import { getSettings, publicApiUrl, XSettings } from './x/settings';
 
 const EXTENSION_VERSION = '2.0.0';
 const REFRESH_ALARM_NAME = 'cookie-refresh';
@@ -207,3 +209,111 @@ chrome.runtime.onMessageExternal.addListener(
     return true;
   }
 );
+
+// --- X library: the content script of x.com sends the tweets it read, the
+// API key stays here ---
+
+const BADGE_KEY = 'xBadge';
+
+const localDay = () => new Date().toLocaleDateString('en-CA');
+
+async function setBadge(count: number) {
+  await chrome.storage.local.set({ [BADGE_KEY]: { day: localDay(), count } });
+  await chrome.action.setBadgeBackgroundColor({ color: '#612BD3' });
+  await chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });
+}
+
+// the badge counts the tweets saved today: it is cleared on a new day
+async function restoreBadge() {
+  const stored = (await chrome.storage.local.get(BADGE_KEY))[BADGE_KEY];
+  await chrome.action.setBadgeText({
+    text: stored?.day === localDay() && stored.count > 0 ? String(stored.count) : '',
+  });
+}
+
+async function callPostiz(
+  settings: XSettings,
+  path: string,
+  init: RequestInit = {}
+) {
+  if (!settings.apiKey) {
+    return { ok: false, error: 'Add your Postiz API key in the extension options' };
+  }
+
+  let url: string;
+  try {
+    url = `${publicApiUrl(settings.baseUrl)}${path}`;
+  } catch {
+    return { ok: false, error: 'The Postiz URL is not valid' };
+  }
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: settings.apiKey,
+      },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const message = Array.isArray(body?.message)
+        ? body.message[0]
+        : body?.message || body?.msg;
+      return { ok: false, error: message || `Postiz answered ${response.status}` };
+    }
+    return { ok: true, ...body };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Could not reach Postiz: ${(err as Error).message}`,
+    };
+  }
+}
+
+async function sendTweets(message: Extract<XInternalRequest, { type: 'X_CAPTURE' | 'X_SAVE' }>) {
+  const result = await callPostiz(await getSettings(), '/x/capture', {
+    method: 'POST',
+    body: JSON.stringify({
+      ownHandle: message.ownHandle,
+      utcOffset: message.utcOffset,
+      tweets: message.tweets,
+    }),
+  });
+  if (result.ok && typeof result.savedToday === 'number') {
+    await setBadge(result.savedToday);
+  }
+  return result;
+}
+
+chrome.runtime.onMessage.addListener(
+  (
+    message: XInternalRequest,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: unknown) => void
+  ) => {
+    if (sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
+    switch (message?.type) {
+      case 'X_CAPTURE':
+      case 'X_SAVE': {
+        sendTweets(message).then(sendResponse);
+        return true;
+      }
+      case 'X_TEST_CONNECTION': {
+        callPostiz(message.settings, '/is-connected').then(sendResponse);
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+);
+
+chrome.action.onClicked.addListener(() => {
+  chrome.runtime.openOptionsPage();
+});
+
+restoreBadge().catch(() => {});

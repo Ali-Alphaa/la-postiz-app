@@ -31,6 +31,19 @@ import {
   CompetitorDto,
   InspirationQueryDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/competitor.dto';
+import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
+import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
+import {
+  XFetchSaveDto,
+  XFetchSearchDto,
+  XFetchUserDto,
+  XLibraryQueryDto,
+  XRepurposeDto,
+  XRepurposePostDto,
+  XRewriteDto,
+  XSaveUrlDto,
+  XVoiceDto,
+} from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
 
 @ApiTags('Growth')
 @Controller('/growth')
@@ -38,7 +51,9 @@ export class GrowthController {
   constructor(
     private _growthService: GrowthService,
     private _growthSettingsService: GrowthSettingsService,
-    private _competitorsService: CompetitorsService
+    private _competitorsService: CompetitorsService,
+    private _xInspirationService: XInspirationService,
+    private _xFetcherService: XFetcherService
   ) {}
 
   @Get('/settings')
@@ -199,5 +214,116 @@ export class GrowthController {
     @Param('id') id: string
   ) {
     return this._competitorsService.rewrite(org.id, id);
+  }
+
+  // X viral library, filled by the browser extension (public API)
+  @Get('/x/status')
+  getXStatus(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.getStatus(org.id);
+  }
+
+  @Get('/x/library')
+  getXLibrary(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: XLibraryQueryDto
+  ) {
+    return this._xInspirationService.getLibrary(org.id, query);
+  }
+
+  @Post('/x/library')
+  saveXTweet(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XSaveUrlDto
+  ) {
+    return this._xInspirationService.saveFromUrl(org.id, body);
+  }
+
+  @Delete('/x/library/:id')
+  hideXTweet(@GetOrgFromRequest() org: Organization, @Param('id') id: string) {
+    return this._xInspirationService.hideTweet(org.id, id);
+  }
+
+  @Post('/x/library/analyze')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  analyzeXLibrary(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.analyzeNow(org.id);
+  }
+
+  @Post('/x/library/:id/rewrite')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  rewriteXTweet(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XRewriteDto
+  ) {
+    return this._xInspirationService.rewrite(org.id, id, body.format);
+  }
+
+  @Get('/x/voice')
+  getXVoice(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.getVoice(org.id);
+  }
+
+  @Put('/x/voice')
+  updateXVoice(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XVoiceDto
+  ) {
+    return this._xInspirationService.updateVoice(org.id, body.styleGuide);
+  }
+
+  @Post('/x/voice/generate')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  generateXVoice(@GetOrgFromRequest() org: Organization) {
+    return this._xInspirationService.generateVoice(org.id);
+  }
+
+  @Post('/x/repurpose')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  repurposeXTweets(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XRepurposeDto
+  ) {
+    return this._xInspirationService.repurpose(org.id, body);
+  }
+
+  @Post('/x/repurpose/:id/post')
+  @CheckPolicies([AuthorizationActions.Create, Sections.POSTS_PER_MONTH])
+  postXRepurpose(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: XRepurposePostDto
+  ) {
+    return this._xInspirationService.postRepurpose(org.id, id, body);
+  }
+
+  // optional read-only X fetcher, off unless X_FETCHER_ENABLED
+  @Get('/x/fetcher')
+  getXFetcher(@GetOrgFromRequest() org: Organization) {
+    return this._xFetcherService.getStatus(org.id);
+  }
+
+  @Post('/x/fetch/user')
+  fetchXUser(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchUserDto
+  ) {
+    return this._xFetcherService.fetchUser(org.id, body);
+  }
+
+  @Post('/x/fetch/search')
+  fetchXSearch(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchSearchDto
+  ) {
+    return this._xFetcherService.fetchSearch(org.id, body);
+  }
+
+  @Post('/x/fetch/save')
+  saveXFetched(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: XFetchSaveDto
+  ) {
+    return this._xInspirationService.saveFetched(org.id, body.tweetIds);
   }
 }

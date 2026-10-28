@@ -91,6 +91,16 @@ services:
 
       # === Misc Settings
       OPENAI_API_KEY: ''
+      # Claude for the X library of the Growth page (model defaults to claude-opus-5-5)
+      ANTHROPIC_API_KEY: ''
+      ANTHROPIC_MODEL: ''
+      # Optional read-only X fetcher (unofficial X access, off by default).
+      # Cookies mode: auth_token / ct0 of a SPARE X account only.
+      X_FETCHER_ENABLED: 'false'
+      X_FETCHER_MODE: 'guest'
+      X_FETCHER_AUTH_TOKEN: ''
+      X_FETCHER_CT0: ''
+      X_FETCHER_DAILY_LIMIT: '150'
       # Only this OAuth client can receive verified user email claims via OIDC.
       OPENAI_OAUTH_CLIENT_ID: ''
       NEXT_PUBLIC_DISCORD_SUPPORT: ''

@@ -105,6 +105,55 @@ export const useInspiration = (provider: string) => {
   return useSWR(`growth-inspiration-${provider || 'all'}`, load);
 };
 
+export interface XLibraryFilters {
+  page: number;
+  search: string;
+  topic: string;
+  hookType: string;
+  format: string;
+  niche: 'on' | 'off' | 'all';
+  source: '' | 'auto' | 'manual' | 'fetch';
+  minRatio: string;
+  sort: 'ratio' | 'likes' | 'recent';
+}
+
+export const useXStatus = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/growth/x/status')).json();
+  }, []);
+  return useSWR('growth-x-status', load);
+};
+
+export const useXLibrary = (filters: XLibraryFilters) => {
+  const fetch = useFetch();
+  const query = new URLSearchParams(
+    Object.entries(filters)
+      .filter(([, value]) => value !== '' && value !== undefined)
+      .map(([key, value]) => [key, String(value)])
+  ).toString();
+  const load = useCallback(async () => {
+    return (await fetch(`/growth/x/library?${query}`)).json();
+  }, [query]);
+  return useSWR(`growth-x-library-${query}`, load);
+};
+
+export const useXVoice = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/growth/x/voice')).json();
+  }, []);
+  return useSWR('growth-x-voice', load);
+};
+
+export const useXFetcher = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/growth/x/fetcher')).json();
+  }, []);
+  return useSWR('growth-x-fetcher', load);
+};
+
 // the error message of a failed request, as the backend sends it
 export const errorMessage = async (response: Response, fallback: string) => {
   try {
