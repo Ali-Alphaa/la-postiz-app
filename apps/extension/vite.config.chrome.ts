@@ -18,6 +18,9 @@ export default mergeConfig(
             service_worker: 'src/background.ts',
             type: 'module',
           },
+          content_scripts: (baseManifest.content_scripts || []).map(
+            (script) => ({ ...script, js: ['src/x/content.ts'] })
+          ),
         } as ManifestV3Export,
         browser: 'chrome',
         contentScripts: {

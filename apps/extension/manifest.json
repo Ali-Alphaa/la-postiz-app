@@ -13,12 +13,38 @@
     "storage"
   ],
   "host_permissions": [
-    "*://*.skool.com/*"
+    "*://*.skool.com/*",
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://postiz.thesigmatrader.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
   },
+  "action": {
+    "default_title": "Postiz: tweets saved today"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://x.com/*",
+        "https://twitter.com/*"
+      ],
+      "js": [
+        "x-content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
   "externally_connectable": {
     "matches": [
       "http://localhost/*",

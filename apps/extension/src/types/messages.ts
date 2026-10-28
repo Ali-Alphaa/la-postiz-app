@@ -83,3 +83,35 @@ export type ExtensionResponse =
   | GetProvidersResponse
   | GetCookiesResponse
   | ErrorResponse;
+
+// ---- Internal messages (x.com content script / options page -> worker) ----
+
+export interface XTweetPayload {
+  id: string;
+  url: string;
+  authorHandle: string;
+  authorName?: string;
+  text: string;
+  likes: number;
+  reposts: number;
+  replies: number;
+  views?: number;
+  mediaType: 'photo' | 'video' | 'none';
+  postedAt?: string;
+  isReply?: boolean;
+  isQuote?: boolean;
+  own?: boolean;
+  manual?: boolean;
+}
+
+export type XInternalRequest =
+  | {
+      type: 'X_CAPTURE' | 'X_SAVE';
+      ownHandle?: string;
+      utcOffset?: number;
+      tweets: XTweetPayload[];
+    }
+  | {
+      type: 'X_TEST_CONNECTION';
+      settings: { baseUrl: string; apiKey: string };
+    };

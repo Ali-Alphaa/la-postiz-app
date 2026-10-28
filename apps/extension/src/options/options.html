@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Postiz extension</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --text: #0e0e0e;
+        --muted: #6b6b6b;
+        --border: #d9d9d9;
+        --accent: #612bd3;
+        --ok: #1a7f37;
+        --error: #c62828;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0e0e0e;
+          --text: #f2f2f2;
+          --muted: #a0a0a0;
+          --border: #2c2c2c;
+          --ok: #4ac26b;
+          --error: #ff6b6b;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: 32px 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      .fields {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        font-weight: 500;
+      }
+      input {
+        padding: 8px 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: transparent;
+        color: inherit;
+        font: inherit;
+      }
+      .actions {
+        display: flex;
+        gap: 8px;
+      }
+      button {
+        padding: 8px 16px;
+        border-radius: 8px;
+        border: 1px solid var(--accent);
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: transparent;
+        color: inherit;
+        border-color: var(--border);
+      }
+      #status.ok {
+        color: var(--ok);
+      }
+      #status.error {
+        color: var(--error);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Postiz for X</h1>
+      <p>
+        Tweets you scroll past on x.com that get at least 3x their author's
+        usual likes are saved to your Postiz library (Growth, X Inspiration).
+        The extension only reads the pages you open; it never scrolls, clicks
+        or posts on X.
+      </p>
+      <form id="form">
+        <div class="fields">
+          <label>
+            Postiz URL
+            <input id="baseUrl" type="url" required placeholder="https://postiz.thesigmatrader.com" />
+          </label>
+          <label>
+            Public API key
+            <input id="apiKey" type="password" required autocomplete="off" />
+          </label>
+          <p>Find the key in Postiz: Settings, Public API.</p>
+          <div class="actions">
+            <button type="submit">Save</button>
+            <button type="button" class="secondary" id="test">Test connection</button>
+          </div>
+          <div id="status" role="status"></div>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="./options.ts"></script>
+  </body>
+</html>
