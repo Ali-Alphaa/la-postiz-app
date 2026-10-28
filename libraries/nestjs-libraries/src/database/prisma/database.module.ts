@@ -59,6 +59,8 @@ import { XInspirationRepository } from '@gitroom/nestjs-libraries/database/prism
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
+import { XNativeRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.repository';
+import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
 
 @Global()
 @Module({
@@ -127,6 +129,8 @@ import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growt
     XInspirationRepository,
     XInspirationService,
     XFetcherService,
+    XNativeRepository,
+    XNativeService,
   ],
   get exports() {
     return this.providers;

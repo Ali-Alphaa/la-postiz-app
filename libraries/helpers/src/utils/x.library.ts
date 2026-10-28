@@ -273,3 +273,41 @@ export const normalizeVariations = (variations: string[][], count = 5) => {
 
   return list.length >= count ? list.slice(0, count) : null;
 };
+
+// --- X native scheduler: posts the extension puts into X's own scheduler ---
+
+export const NATIVE_MAX_WEIGHTED_LENGTH = 280;
+// X refuses a time too close; the extension also needs time to sync
+export const NATIVE_MIN_LEAD_MINUTES = 10;
+// X's scheduler goes up to about 18 months ahead
+export const NATIVE_MAX_LEAD_MONTHS = 18;
+
+// why a post can't go to X's scheduler, or null when it can
+export const nativeScheduleError = (
+  text: string,
+  scheduledAt: Date,
+  weightedLength: (text: string) => number,
+  now = new Date()
+) => {
+  if (!text.trim()) {
+    return 'The post is empty';
+  }
+  if (weightedLength(text) > NATIVE_MAX_WEIGHTED_LENGTH) {
+    return `The post is longer than ${NATIVE_MAX_WEIGHTED_LENGTH} characters`;
+  }
+  if (Number.isNaN(scheduledAt.getTime())) {
+    return 'The date is not valid';
+  }
+  if (
+    scheduledAt.getTime() <
+    now.getTime() + NATIVE_MIN_LEAD_MINUTES * 60 * 1000
+  ) {
+    return `Pick a time at least ${NATIVE_MIN_LEAD_MINUTES} minutes from now`;
+  }
+  const max = new Date(now.getTime());
+  max.setUTCMonth(max.getUTCMonth() + NATIVE_MAX_LEAD_MONTHS);
+  if (scheduledAt.getTime() > max.getTime()) {
+    return `X can schedule up to ${NATIVE_MAX_LEAD_MONTHS} months ahead`;
+  }
+  return null;
+};

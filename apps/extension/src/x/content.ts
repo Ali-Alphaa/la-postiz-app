@@ -3,6 +3,7 @@
 // The tweets go to the service worker, which holds the Postiz API key.
 import { getOwnHandle, ParsedTweet, parseTweet } from './tweet.parser';
 import { CaptureQueue } from './capture.queue';
+import { NativeItem, scheduleOne } from './native.scheduler';
 
 const TWEET = 'article[data-testid="tweet"]';
 const BUTTON_ATTRIBUTE = 'data-postiz-save';
@@ -173,3 +174,73 @@ observer.observe(document.body, {
   characterData: true,
 });
 scan();
+
+// --- X scheduler: the background asks this tab to schedule one post (only
+// after the user clicked "Sync" in the extension) ---
+
+const OVERLAY_ID = 'postiz-x-scheduler';
+let stopRequested = false;
+
+const showOverlay = (text: string) => {
+  let overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = OVERLAY_ID;
+    overlay.style.cssText =
+      'position:fixed;z-index:2147483647;bottom:16px;right:16px;max-width:320px;padding:12px 14px;border-radius:12px;background:#612BD3;color:#fff;font:14px/1.4 system-ui,sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.3);display:flex;gap:12px;align-items:center;';
+    const label = document.createElement('span');
+    label.dataset.role = 'label';
+    const stopButton = document.createElement('button');
+    stopButton.type = 'button';
+    stopButton.textContent = 'Stop';
+    stopButton.style.cssText =
+      'padding:4px 12px;border-radius:9999px;border:1px solid #fff;background:transparent;color:#fff;cursor:pointer;font:inherit;';
+    stopButton.addEventListener('click', () => {
+      stopRequested = true;
+      chrome.runtime.sendMessage({ type: 'X_NATIVE_STOP' }).catch(() => {});
+      (
+        overlay!.querySelector('[data-role="label"]') as HTMLElement
+      ).textContent = 'Stopping…';
+    });
+    overlay.append(label, stopButton);
+    document.body.appendChild(overlay);
+  }
+  (overlay.querySelector('[data-role="label"]') as HTMLElement).textContent =
+    text;
+};
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== 'X_NATIVE_RUN_ONE') {
+    return false;
+  }
+  const { item, dryRun, index, total } = message as {
+    item: NativeItem;
+    dryRun: boolean;
+    index: number;
+    total: number;
+  };
+  stopRequested = false;
+  showOverlay(
+    `Postiz${dryRun ? ' (dry run)' : ''}: scheduling ${
+      index + 1
+    } of ${total} in X…`
+  );
+  scheduleOne(document, item, {
+    dryRun,
+    shouldStop: () => stopRequested,
+  })
+    .then((result) => {
+      showOverlay(
+        result.ok
+          ? result.dryRun
+            ? `Dry run ${index + 1} of ${total}: ready, not scheduled`
+            : `Scheduled ${index + 1} of ${total} in X`
+          : `Not scheduled: ${result.error}`
+      );
+      sendResponse(result);
+    })
+    .catch((err) =>
+      sendResponse({ ok: false, error: (err as Error).message || 'Failed' })
+    );
+  return true;
+});

@@ -1,6 +1,8 @@
+import { weightedLength } from '@gitroom/helpers/utils/count.length';
 import {
   bestVoiceSamples,
   likesRatio,
+  nativeScheduleError,
   normalizeVariations,
   oembedHtmlToTweet,
   parseTweetUrl,
@@ -255,5 +257,52 @@ describe('normalizeVariations', () => {
   it('asks again when there are not enough', () => {
     expect(normalizeVariations([['a'], [' '], ['b'], ['c'], ['d']])).toBeNull();
     expect(normalizeVariations([])).toBeNull();
+  });
+});
+
+describe('nativeScheduleError', () => {
+  const now = new Date('2026-10-28T12:00:00.000Z');
+  const length = (text: string) => text.length;
+  const at = (minutes: number) => new Date(now.getTime() + minutes * 60000);
+
+  it('accepts a post between 10 minutes and 18 months ahead', () => {
+    expect(nativeScheduleError('hello', at(10), length, now)).toBeNull();
+    expect(
+      nativeScheduleError(
+        'hello',
+        new Date('2028-04-28T12:00:00.000Z'),
+        length,
+        now
+      )
+    ).toBeNull();
+  });
+
+  it('rejects empty, long, too soon, too far and invalid dates', () => {
+    expect(nativeScheduleError('  ', at(60), length, now)).toMatch(/empty/);
+    expect(nativeScheduleError('x'.repeat(281), at(60), length, now)).toMatch(
+      /280/
+    );
+    expect(nativeScheduleError('ok', at(9), length, now)).toMatch(/10 minutes/);
+    expect(
+      nativeScheduleError(
+        'ok',
+        new Date('2028-04-28T12:01:00.000Z'),
+        length,
+        now
+      )
+    ).toMatch(/18 months/);
+    expect(nativeScheduleError('ok', new Date('nope'), length, now)).toMatch(
+      /valid/
+    );
+  });
+
+  it('uses the weighted length of X', () => {
+    // weightedLength counts an emoji or a CJK character as 2
+    expect(
+      nativeScheduleError('漢'.repeat(141), at(60), weightedLength, now)
+    ).toMatch(/280/);
+    expect(
+      nativeScheduleError('漢'.repeat(140), at(60), weightedLength, now)
+    ).toBeNull();
   });
 });

@@ -30,6 +30,8 @@ import {
 } from '@gitroom/frontend/components/growth/channel.select';
 import { textToHtml } from '@gitroom/frontend/components/growth/ab.tests';
 import { XCollect } from '@gitroom/frontend/components/growth/x.collect';
+import { XNativeScheduler } from '@gitroom/frontend/components/growth/x.native';
+import { mutate as mutateSwr } from 'swr';
 
 const X_MAX_CHARACTERS = 280;
 const MAX_REPURPOSE = 10;
@@ -330,7 +332,8 @@ const Drafts: FC<{
   drafts: string[][];
   repurposeId?: string;
   onClose: () => void;
-}> = ({ title, drafts: initial, repurposeId, onClose }) => {
+  onNativeQueued?: () => void;
+}> = ({ title, drafts: initial, repurposeId, onClose, onNativeQueued }) => {
   const t = useT();
   const fetch = useFetch();
   const toaster = useToaster();
@@ -341,6 +344,7 @@ const Drafts: FC<{
   const [dates, setDates] = useState<Record<number, string>>({});
   const [posting, setPosting] = useState('');
   const [posted, setPosted] = useState<Record<number, string>>({});
+  const [nativeQueued, setNative] = useState<Record<number, boolean>>({});
 
   useEffect(() => setDrafts(initial), [initial]);
   useEffect(() => {
@@ -385,6 +389,47 @@ const Drafts: FC<{
       );
     },
     [repurposeId, channel, drafts, dates]
+  );
+
+  // free: the extension puts it into X's own scheduler (X Premium)
+  const native = useCallback(
+    (index: number) => async () => {
+      setPosting(`${index}-native`);
+      const response = await fetch(
+        `/growth/x/repurpose/${repurposeId}/native`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            index,
+            text: drafts[index][0],
+            scheduledAt: newDayjs(dates[index]).utc().toISOString(),
+          }),
+        }
+      );
+      setPosting('');
+      if (!response.ok) {
+        toaster.show(
+          await errorMessage(
+            response,
+            t('something_went_wrong', 'Something went wrong')
+          ),
+          'warning'
+        );
+        return;
+      }
+      const { scheduledAt } = await response.json();
+      setPosted((prev) => ({ ...prev, [index]: scheduledAt }));
+      setNative((prev) => ({ ...prev, [index]: true }));
+      toaster.show(
+        t(
+          'x_native_queued',
+          'Queued for the X scheduler: sync it from the extension'
+        ),
+        'success'
+      );
+      onNativeQueued?.();
+    },
+    [repurposeId, drafts, dates]
   );
 
   return (
@@ -442,11 +487,17 @@ const Drafts: FC<{
             />
             {posted[index] ? (
               <div className="text-[13px] text-green-500">
-                {t('posted_for', 'Created for')}{' '}
+                {nativeQueued[index]
+                  ? t('x_native_queued_for', 'Queued for the X scheduler at')
+                  : t('posted_for', 'Created for')}{' '}
                 {fromUtc(posted[index]).format('DD/MM/YYYY HH:mm')} ·{' '}
-                <a href="/launches" className="underline">
-                  {t('open_calendar', 'Open the calendar')}
-                </a>
+                {nativeQueued[index] ? (
+                  t('x_native_sync_hint', 'sync it from the extension')
+                ) : (
+                  <a href="/launches" className="underline">
+                    {t('open_calendar', 'Open the calendar')}
+                  </a>
+                )}
               </div>
             ) : (
               <div className="flex gap-[8px] flex-wrap items-end">
@@ -457,39 +508,59 @@ const Drafts: FC<{
                   {t('open_in_editor', 'Open in editor')}
                 </Button>
                 {!!repurposeId && !!channels.length && (
-                  <>
-                    <Button
-                      onClick={post(index, 'now')}
-                      loading={posting === `${index}-now`}
-                      disabled={!channel || !!posting}
-                    >
-                      {t('post_now', 'Post now')}
-                    </Button>
-                    <div className="w-[200px]">
-                      <Input
-                        label={t('schedule_at', 'Schedule at')}
-                        name={`date-${index}`}
-                        type="datetime-local"
-                        disableForm={true}
-                        removeError={true}
-                        value={dates[index] || ''}
-                        onChange={(e) =>
-                          setDates((prev) => ({
-                            ...prev,
-                            [index]: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <Button
-                      secondary={true}
-                      onClick={post(index, 'schedule')}
-                      loading={posting === `${index}-schedule`}
-                      disabled={!channel || !dates[index] || !!posting}
-                    >
-                      {t('schedule', 'Schedule')}
-                    </Button>
-                  </>
+                  <Button
+                    onClick={post(index, 'now')}
+                    loading={posting === `${index}-now`}
+                    disabled={!channel || !!posting}
+                  >
+                    {t('post_now', 'Post now')}
+                  </Button>
+                )}
+                {!!repurposeId && (
+                  <div className="w-[200px]">
+                    <Input
+                      label={t('schedule_at', 'Schedule at')}
+                      name={`date-${index}`}
+                      type="datetime-local"
+                      disableForm={true}
+                      removeError={true}
+                      value={dates[index] || ''}
+                      onChange={(e) =>
+                        setDates((prev) => ({
+                          ...prev,
+                          [index]: e.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                )}
+                {!!repurposeId && !!channels.length && (
+                  <Button
+                    secondary={true}
+                    onClick={post(index, 'schedule')}
+                    loading={posting === `${index}-schedule`}
+                    disabled={!channel || !dates[index] || !!posting}
+                  >
+                    {t('schedule', 'Schedule')}
+                  </Button>
+                )}
+                {!!repurposeId && (
+                  <Button
+                    secondary={true}
+                    onClick={native(index)}
+                    loading={posting === `${index}-native`}
+                    disabled={!dates[index] || posts.length > 1 || !!posting}
+                    title={
+                      posts.length > 1
+                        ? t(
+                            'x_native_no_threads',
+                            'X can only schedule single posts from the web'
+                          )
+                        : ''
+                    }
+                  >
+                    {t('schedule_in_x', 'Schedule in X (free, Premium)')}
+                  </Button>
                 )}
               </div>
             )}
@@ -786,10 +857,12 @@ export const XInspiration: FC = () => {
           drafts={drafts.drafts}
           repurposeId={drafts.repurposeId}
           onClose={() => setDrafts(null)}
+          onNativeQueued={() => mutateSwr('growth-x-native')}
         />
       )}
       <AddTweet onSaved={reload} />
       <XCollect onSaved={reload} />
+      <XNativeScheduler />
       <GrowthCard className="flex gap-[12px] items-end flex-wrap">
         <div className="w-[220px] mobile:w-full">
           <Input

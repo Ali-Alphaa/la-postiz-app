@@ -79,3 +79,93 @@ getSettings().then((settings) => {
   baseUrl.value = settings.baseUrl;
   apiKey.value = settings.apiKey;
 });
+
+// --- X scheduler ---
+
+const DRY_RUN_KEY = 'xNativeDryRun';
+const RUN_KEY = 'xNativeRun';
+const pending = document.getElementById('pending') as HTMLDivElement;
+const dryRun = document.getElementById('dryRun') as HTMLInputElement;
+const sync = document.getElementById('sync') as HTMLButtonElement;
+const stop = document.getElementById('stop') as HTMLButtonElement;
+const run = document.getElementById('run') as HTMLDivElement;
+let pendingCount = 0;
+
+const showPending = (count: number) => {
+  pendingCount = count;
+  pending.textContent = count
+    ? `${count} post${count > 1 ? 's' : ''} waiting for the X scheduler`
+    : 'No post waiting for the X scheduler';
+  sync.textContent = count
+    ? `Sync ${Math.min(count, 25)} post${count > 1 ? 's' : ''} to X scheduler`
+    : 'Sync to X scheduler';
+};
+
+const showRun = (state: any) => {
+  if (!state) {
+    run.textContent = '';
+    return;
+  }
+  sync.disabled = !!state.running;
+  stop.hidden = !state.running;
+  if (state.error) {
+    run.textContent = state.error;
+    run.className = 'error';
+    return;
+  }
+  const prefix = state.dryRun ? 'Dry run: ' : '';
+  run.className = state.running ? '' : state.failed ? 'error' : 'ok';
+  run.textContent = state.running
+    ? `${prefix}${state.done} of ${state.total} done…${
+        state.last ? ` Last error: ${state.last}` : ''
+      }`
+    : `${prefix}${state.synced} ${state.dryRun ? 'ready' : 'scheduled in X'}, ${
+        state.failed
+      } failed${state.stopped ? ' (stopped)' : ''}`;
+};
+
+// the very first run is a dry run; the choice is kept afterwards
+chrome.storage.local.get([DRY_RUN_KEY, RUN_KEY]).then((stored) => {
+  dryRun.checked = stored[DRY_RUN_KEY] ?? true;
+  showRun(stored[RUN_KEY]);
+});
+dryRun.addEventListener('change', () =>
+  chrome.storage.local.set({ [DRY_RUN_KEY]: dryRun.checked })
+);
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes[RUN_KEY]) {
+    showRun(changes[RUN_KEY].newValue);
+  }
+  if (changes.xNativePending) {
+    showPending(changes.xNativePending.newValue?.count || 0);
+  }
+});
+
+chrome.runtime.sendMessage({ type: 'X_NATIVE_STATUS' }).then((result) => {
+  if (result?.ok) {
+    showPending(result.pending || 0);
+  } else {
+    pending.textContent = result?.error || 'Could not reach Postiz';
+  }
+});
+
+sync.addEventListener('click', async () => {
+  if (!pendingCount) {
+    run.textContent = 'Nothing to sync';
+    return;
+  }
+  await chrome.storage.local.set({ [DRY_RUN_KEY]: dryRun.checked });
+  const result = await chrome.runtime.sendMessage({
+    type: 'X_NATIVE_SYNC',
+    dryRun: dryRun.checked,
+  });
+  if (!result?.ok) {
+    run.textContent = result?.error || 'Could not start';
+    run.className = 'error';
+  }
+});
+
+stop.addEventListener('click', () =>
+  chrome.runtime.sendMessage({ type: 'X_NATIVE_STOP' })
+);
