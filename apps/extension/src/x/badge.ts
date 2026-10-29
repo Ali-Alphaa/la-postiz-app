@@ -15,3 +15,23 @@ export const badgeFor = (state: { pending: number; savedToday: number }) => {
   }
   return { text: '', color: SAVED_COLOR };
 };
+
+export interface DayCount {
+  day: string;
+  count: number;
+}
+
+// the tweets/posts saved today, per platform (counts of an older day are 0)
+export const savedTodayByPlatform = (
+  stored: { x?: DayCount; instagram?: DayCount; tiktok?: DayCount },
+  today: string
+) => {
+  const of = (value?: DayCount) =>
+    value?.day === today ? value.count || 0 : 0;
+  const counts = {
+    x: of(stored.x),
+    instagram: of(stored.instagram),
+    tiktok: of(stored.tiktok),
+  };
+  return { ...counts, total: counts.x + counts.instagram + counts.tiktok };
+};

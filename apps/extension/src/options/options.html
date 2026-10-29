@@ -94,6 +94,7 @@
         color: inherit;
         border-color: var(--border);
       }
+      #bbStatus.ok,
       #status.ok,
       #run.ok {
         color: var(--ok);
@@ -101,6 +102,7 @@
       .warning {
         color: #c2410c;
       }
+      #bbStatus.error,
       #status.error,
       #run.error {
         color: var(--error);
@@ -109,7 +111,8 @@
   </head>
   <body>
     <main>
-      <h1>Postiz for X</h1>
+      <h1>Postiz &amp; BrightBean</h1>
+      <h2>Postiz (X)</h2>
       <p>
         Tweets you scroll past on x.com that get at least 3x their author's
         usual likes are saved to your Postiz library (Growth, X Inspiration).
@@ -161,6 +164,46 @@
           The toolbar badge shows the posts waiting for the X scheduler
           (orange), otherwise the tweets saved to your library today (purple).
         </p>
+      </section>
+      <section class="fields" aria-labelledby="bb-title">
+        <h2 id="bb-title">BrightBean (Instagram &amp; TikTok)</h2>
+        <p>
+          Instagram posts and TikTok videos you scroll past go to your
+          BrightBean Studio inspiration library, with a "Save to BrightBean"
+          button on each one. The extension only reads the pages you open; it
+          never scrolls, clicks, likes or posts on Instagram or TikTok.
+        </p>
+        <form id="bbForm" class="fields">
+          <label>
+            BrightBean URL
+            <input id="bbBaseUrl" type="url" required placeholder="https://social.thesigmatrader.com" />
+          </label>
+          <label>
+            API key
+            <input id="bbApiKey" type="password" required autocomplete="off" placeholder="bb_studio_…" />
+          </label>
+          <p>
+            Create the key in BrightBean: organization settings, API keys
+            (/organizations/api-keys/). Keys start with bb_studio_.
+          </p>
+          <label class="inline">
+            <input id="bbInstagram" type="checkbox" checked />
+            Capture Instagram
+          </label>
+          <label class="inline">
+            <input id="bbTiktok" type="checkbox" checked />
+            Capture TikTok
+          </label>
+          <div class="actions">
+            <button type="submit">Save</button>
+            <button type="button" class="secondary" id="bbTest">Test connection</button>
+          </div>
+          <div id="bbStatus" role="status"></div>
+        </form>
+      </section>
+      <section class="fields" aria-labelledby="today-title">
+        <h2 id="today-title">Saved today</h2>
+        <div id="savedToday">X 0 · Instagram 0 · TikTok 0</div>
       </section>
     </main>
     <script type="module" src="./options.ts"></script>

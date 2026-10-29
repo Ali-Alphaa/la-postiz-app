@@ -3,7 +3,14 @@ import { getAllProviders, getProvider } from './providers/provider.registry';
 import { CookieProvider } from './providers/cookie-provider.interface';
 import { XInternalRequest } from './types/messages';
 import { getSettings, publicApiUrl, XSettings } from './x/settings';
-import { badgeFor } from './x/badge';
+import { badgeFor, savedTodayByPlatform } from './x/badge';
+import {
+  BBSettings,
+  getBBSettings,
+  inspirationApiUrl,
+  isPlatformEnabled,
+} from './bb/settings';
+import { BB_MAX_ITEMS, BBItem, BBPlatform } from './bb/types';
 import {
   COMPOSE_URL,
   NativeItem,
@@ -222,18 +229,27 @@ chrome.runtime.onMessageExternal.addListener(
 // API key stays here ---
 
 const BADGE_KEY = 'xBadge';
+const BB_BADGE_KEY = 'bbBadge';
 
 const localDay = () => new Date().toLocaleDateString('en-CA');
 
 const PENDING_KEY = 'xNativePending';
 
 // pending posts for X's scheduler first (orange), else the tweets saved today
+// saved today: X (Postiz) + Instagram and TikTok (BrightBean)
 async function renderBadge() {
-  const stored = await chrome.storage.local.get([BADGE_KEY, PENDING_KEY]);
-  const saved = stored[BADGE_KEY];
+  const stored = await chrome.storage.local.get([
+    BADGE_KEY,
+    PENDING_KEY,
+    BB_BADGE_KEY,
+  ]);
+  const saved = savedTodayByPlatform(
+    { x: stored[BADGE_KEY], ...(stored[BB_BADGE_KEY] || {}) },
+    localDay()
+  );
   const badge = badgeFor({
     pending: stored[PENDING_KEY]?.count || 0,
-    savedToday: saved?.day === localDay() ? saved.count || 0 : 0,
+    savedToday: saved.total,
   });
   await chrome.action.setBadgeBackgroundColor({ color: badge.color });
   await chrome.action.setBadgeText({ text: badge.text });
@@ -309,6 +325,89 @@ async function sendTweets(message: Extract<XInternalRequest, { type: 'X_CAPTURE'
   return result;
 }
 
+// --- Instagram and TikTok: relayed to BrightBean Studio, whose key stays
+// here ---
+
+async function callBrightBean(
+  settings: BBSettings,
+  path: string,
+  init: RequestInit = {}
+) {
+  if (!settings.apiKey) {
+    return {
+      ok: false,
+      error: 'Add your BrightBean API key in the extension options',
+    };
+  }
+
+  let url: string;
+  try {
+    url = `${inspirationApiUrl(settings.baseUrl)}${path}`;
+  } catch {
+    return { ok: false, error: 'The BrightBean URL is not valid' };
+  }
+
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.apiKey}`,
+      },
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok || body?.ok === false) {
+      const message = Array.isArray(body?.message)
+        ? body.message[0]
+        : body?.message || body?.detail || body?.error;
+      return {
+        ok: false,
+        error: message || `BrightBean answered ${response.status}`,
+      };
+    }
+    return { ...body, ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Could not reach BrightBean: ${(err as Error).message}`,
+    };
+  }
+}
+
+async function setBBSaved(platform: BBPlatform, count: number) {
+  const stored = (await chrome.storage.local.get(BB_BADGE_KEY))[BB_BADGE_KEY] || {};
+  await chrome.storage.local.set({
+    [BB_BADGE_KEY]: { ...stored, [platform]: { day: localDay(), count } },
+  });
+  await renderBadge();
+}
+
+async function sendToBrightBean(message: {
+  type: 'BB_CAPTURE' | 'BB_SAVE';
+  platform: BBPlatform;
+  ownHandle?: string;
+  utcOffset?: number;
+  items: BBItem[];
+}) {
+  const settings = await getBBSettings();
+  if (!isPlatformEnabled(settings, message.platform)) {
+    return { ok: false, error: 'This platform is switched off' };
+  }
+  const result = await callBrightBean(settings, '/capture', {
+    method: 'POST',
+    body: JSON.stringify({
+      platform: message.platform,
+      ownHandle: message.ownHandle,
+      utcOffset: message.utcOffset,
+      items: (message.items || []).slice(0, BB_MAX_ITEMS),
+    }),
+  });
+  if (result.ok && typeof result.savedToday === 'number') {
+    await setBBSaved(message.platform, result.savedToday);
+  }
+  return result;
+}
+
 chrome.runtime.onMessage.addListener(
   (
     message: XInternalRequest,
@@ -323,6 +422,21 @@ chrome.runtime.onMessage.addListener(
       case 'X_CAPTURE':
       case 'X_SAVE': {
         sendTweets(message).then(sendResponse);
+        return true;
+      }
+      case 'BB_STATUS': {
+        getBBSettings().then((settings) =>
+          sendResponse({ enabled: isPlatformEnabled(settings, message.platform) })
+        );
+        return true;
+      }
+      case 'BB_CAPTURE':
+      case 'BB_SAVE': {
+        sendToBrightBean(message).then(sendResponse);
+        return true;
+      }
+      case 'BB_TEST_CONNECTION': {
+        callBrightBean(message.settings, '/ping').then(sendResponse);
         return true;
       }
       case 'X_TEST_CONNECTION': {

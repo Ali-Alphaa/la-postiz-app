@@ -6,6 +6,15 @@ import {
   saveSettings,
   XSettings,
 } from '../x/settings';
+import {
+  BBSettings,
+  DEFAULT_BB_URL,
+  getBBSettings,
+  inspirationApiUrl,
+  isBBKey,
+  saveBBSettings,
+} from '../bb/settings';
+import { savedTodayByPlatform } from '../x/badge';
 
 const form = document.getElementById('form') as HTMLFormElement;
 const baseUrl = document.getElementById('baseUrl') as HTMLInputElement;
@@ -173,3 +182,110 @@ sync.addEventListener('click', async () => {
 stop.addEventListener('click', () =>
   chrome.runtime.sendMessage({ type: 'X_NATIVE_STOP' })
 );
+
+// --- BrightBean (Instagram & TikTok) ---
+
+const bbForm = document.getElementById('bbForm') as HTMLFormElement;
+const bbBaseUrl = document.getElementById('bbBaseUrl') as HTMLInputElement;
+const bbApiKey = document.getElementById('bbApiKey') as HTMLInputElement;
+const bbInstagram = document.getElementById('bbInstagram') as HTMLInputElement;
+const bbTiktok = document.getElementById('bbTiktok') as HTMLInputElement;
+const bbTest = document.getElementById('bbTest') as HTMLButtonElement;
+const bbStatus = document.getElementById('bbStatus') as HTMLDivElement;
+const savedToday = document.getElementById('savedToday') as HTMLDivElement;
+
+const showBB = (message: string, kind: 'ok' | 'error' | '' = '') => {
+  bbStatus.textContent = message;
+  bbStatus.className = kind;
+};
+
+const readBB = (): BBSettings | null => {
+  const settings = {
+    baseUrl: bbBaseUrl.value.trim().replace(/\/+$/, '') || DEFAULT_BB_URL,
+    apiKey: bbApiKey.value.trim(),
+    instagram: bbInstagram.checked,
+    tiktok: bbTiktok.checked,
+  };
+  try {
+    inspirationApiUrl(settings.baseUrl);
+  } catch {
+    showBB('The BrightBean URL is not valid', 'error');
+    return null;
+  }
+  if (settings.apiKey && !isBBKey(settings.apiKey)) {
+    showBB('A BrightBean API key starts with bb_studio_', 'error');
+    return null;
+  }
+  return settings;
+};
+
+const saveBB = async () => {
+  const settings = readBB();
+  if (!settings) {
+    return null;
+  }
+  // the service worker can only call the BrightBean domain once allowed
+  if (
+    !(await chrome.permissions.request({
+      origins: [originPattern(settings.baseUrl)],
+    }))
+  ) {
+    showBB(
+      'Allow the extension to reach your BrightBean domain to continue',
+      'error'
+    );
+    return null;
+  }
+  await saveBBSettings(settings);
+  return settings;
+};
+
+bbForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  if (await saveBB()) {
+    showBB('Saved. Reload the Instagram and TikTok tabs.', 'ok');
+  }
+});
+
+bbTest.addEventListener('click', async () => {
+  const settings = await saveBB();
+  if (!settings) {
+    return;
+  }
+  showBB('Testing…');
+  const result = await chrome.runtime.sendMessage({
+    type: 'BB_TEST_CONNECTION',
+    settings,
+  });
+  showBB(
+    result?.ok
+      ? `Connected to BrightBean${
+          result.workspace ? ` (${result.workspace})` : ''
+        }`
+      : result?.error || 'Connection failed',
+    result?.ok ? 'ok' : 'error'
+  );
+});
+
+getBBSettings().then((settings) => {
+  bbBaseUrl.value = settings.baseUrl;
+  bbApiKey.value = settings.apiKey;
+  bbInstagram.checked = settings.instagram;
+  bbTiktok.checked = settings.tiktok;
+});
+
+// saved today per platform, as the badge counts them
+const showSavedToday = async () => {
+  const stored = await chrome.storage.local.get(['xBadge', 'bbBadge']);
+  const counts = savedTodayByPlatform(
+    { x: stored.xBadge, ...(stored.bbBadge || {}) },
+    new Date().toLocaleDateString('en-CA')
+  );
+  savedToday.textContent = `X ${counts.x} · Instagram ${counts.instagram} · TikTok ${counts.tiktok}`;
+};
+showSavedToday();
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.xBadge || changes.bbBadge) {
+    showSavedToday();
+  }
+});

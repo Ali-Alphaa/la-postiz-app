@@ -1,6 +1,14 @@
 # Postiz browser extension
 
-Chrome extension (Manifest V3) with two features:
+Chrome extension (Manifest V3) for three platforms and two backends:
+
+| Platform | Sent to | API key |
+|---|---|---|
+| X (x.com) | Postiz | Postiz: Settings → Public API |
+| Instagram (www.instagram.com) | BrightBean Studio | BrightBean: organization settings → API keys (`/organizations/api-keys/`), keys start with `bb_studio_` |
+| TikTok (www.tiktok.com) | BrightBean Studio | the same BrightBean key |
+
+Features:
 
 - **Cookie provider**: lets Postiz connect channels that only work with a
   browser session (Skool).
@@ -16,10 +24,20 @@ Chrome extension (Manifest V3) with two features:
     scheduler when you click **Sync to X scheduler** in the extension options;
     X then publishes them even when your computer is off.
 
+- **Instagram and TikTok library** (BrightBean Studio): while you browse
+  Instagram (feed, posts, reels, the post modal) or TikTok (For You /
+  Following, video pages, profile grids), the posts on your screen are sent
+  to the inspiration library of your BrightBean Studio
+  (`POST <BrightBean>/api/v1/growth/inspiration/capture`), with a
+  **Save to BrightBean** button on each post and video. Your own posts are
+  marked `own`. Each platform can be switched off in the options.
+
   The extension only reads the pages you open. It never scrolls, clicks,
-  follows, likes or posts on X, and it makes no calls to X.
-  The toolbar badge shows the posts waiting for the X scheduler (orange)
-  when there are some, otherwise how many tweets were saved today (purple).
+  follows, likes or posts on X, Instagram or TikTok, and it makes no calls to
+  them. The toolbar badge shows the posts waiting for the X scheduler
+  (orange) when there are some, otherwise how many posts were saved today on
+  X, Instagram and TikTok together (purple); the options page shows the count
+  of each platform.
 
 ## Build
 
@@ -43,6 +61,22 @@ pnpm --filter ./apps/extension run test
 3. Click **Load unpacked** and pick the `apps/extension/dist` folder.
 4. After a new build, click the reload icon of the extension card and reload
    the x.com tabs.
+
+## Connect it to BrightBean (Instagram & TikTok)
+
+1. In BrightBean Studio, open the organization settings → **API keys**
+   (`/organizations/api-keys/`) and issue a key (it starts with
+   `bb_studio_`).
+2. In the extension options, section **BrightBean (Instagram & TikTok)**:
+   enter the BrightBean URL (default `https://social.thesigmatrader.com`)
+   and the key, choose which platforms to capture, then **Save** and
+   **Test connection** (`GET <BrightBean>/api/v1/growth/inspiration/ping`).
+3. Reload the Instagram and TikTok tabs.
+
+The Instagram and TikTok selectors (`src/instagram/instagram.parser.ts`,
+`src/tiktok/tiktok.parser.ts`) were written from the 2026 markup of both
+sites and not verified against the live sites: expect to adjust them when
+the sites change.
 
 ## Connect it to Postiz
 

@@ -9,18 +9,27 @@ export const MAX_BATCH = 50;
 export const MAX_BATCH_BYTES = 90_000;
 export const MAX_TEXT = 4_000;
 
-// The tweets seen on the page, waiting to be sent to Postiz. Ids that were
-// sent in this page session are not sent again, unless their likes grew.
-export class CaptureQueue {
+export interface QueueItem {
+  id: string;
+  text: string;
+  // null when the page doesn't show it
+  likes: number | null;
+}
+
+// The posts seen on the page (tweets, Instagram posts, TikTok videos),
+// waiting to be sent. Ids that were sent in this page session are not sent
+// again, unless their likes grew.
+export class CaptureQueue<T extends QueueItem = ParsedTweet> {
   private sent = new Map<string, number>();
-  private waiting = new Map<string, ParsedTweet>();
+  private waiting = new Map<string, T>();
   private lastFlush = 0;
 
-  add(tweet: ParsedTweet) {
+  add(tweet: T) {
     const sentLikes = this.sent.get(tweet.id);
+    const likes = tweet.likes ?? 0;
     if (
       sentLikes !== undefined &&
-      tweet.likes < Math.max(sentLikes * RESEND_GROWTH, sentLikes + 1)
+      likes < Math.max(sentLikes * RESEND_GROWTH, sentLikes + 1)
     ) {
       return false;
     }
@@ -42,7 +51,7 @@ export class CaptureQueue {
 
   // the next batch, small enough for the API; the rest waits for next time
   take(now: number) {
-    const batch: ParsedTweet[] = [];
+    const batch: T[] = [];
     let bytes = 0;
     for (const tweet of this.waiting.values()) {
       const size = JSON.stringify(tweet).length;
@@ -58,7 +67,7 @@ export class CaptureQueue {
 
     for (const tweet of batch) {
       this.waiting.delete(tweet.id);
-      this.sent.set(tweet.id, tweet.likes);
+      this.sent.set(tweet.id, tweet.likes ?? 0);
     }
     this.lastFlush = now;
     return batch;
