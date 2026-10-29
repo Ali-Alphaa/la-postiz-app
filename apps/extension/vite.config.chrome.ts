@@ -18,8 +18,15 @@ export default mergeConfig(
             service_worker: 'src/background.ts',
             type: 'module',
           },
+          // the sources of the content scripts (built files in manifest.json)
           content_scripts: (baseManifest.content_scripts || []).map(
-            (script) => ({ ...script, js: ['src/x/content.ts'] })
+            (script) => ({
+              ...script,
+              js: (script.js || []).map(
+                (file) =>
+                  `src/${file.replace('-content.js', '')}/content.ts`
+              ),
+            })
           ),
         } as ManifestV3Export,
         browser: 'chrome',

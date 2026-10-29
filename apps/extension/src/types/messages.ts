@@ -116,5 +116,17 @@ export type XInternalRequest =
       settings: { baseUrl: string; apiKey: string };
     }
   | { type: 'X_NATIVE_STATUS' }
+  | { type: 'BB_STATUS'; platform: 'instagram' | 'tiktok' }
+  | {
+      type: 'BB_CAPTURE' | 'BB_SAVE';
+      platform: 'instagram' | 'tiktok';
+      ownHandle?: string;
+      utcOffset?: number;
+      items: import('../bb/types').BBItem[];
+    }
+  | {
+      type: 'BB_TEST_CONNECTION';
+      settings: import('../bb/settings').BBSettings;
+    }
   | { type: 'X_NATIVE_SYNC'; dryRun: boolean }
   | { type: 'X_NATIVE_STOP' };

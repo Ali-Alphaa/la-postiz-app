@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Postiz",
   "version": "2.0.0",
-  "description": "Postiz browser extension for social media scheduling",
+  "description": "Postiz browser extension: X with Postiz, Instagram and TikTok with BrightBean Studio",
   "icons": {
     "32": "icon-32.png",
     "128": "icon-128.png"
@@ -16,7 +16,10 @@
     "*://*.skool.com/*",
     "https://x.com/*",
     "https://twitter.com/*",
-    "https://postiz.thesigmatrader.com/*"
+    "https://postiz.thesigmatrader.com/*",
+    "https://www.instagram.com/*",
+    "https://www.tiktok.com/*",
+    "https://social.thesigmatrader.com/*"
   ],
   "optional_host_permissions": [
     "https://*/*",
@@ -41,6 +44,24 @@
       ],
       "js": [
         "x-content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "instagram-content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.tiktok.com/*"
+      ],
+      "js": [
+        "tiktok-content.js"
       ],
       "run_at": "document_idle"
     }
