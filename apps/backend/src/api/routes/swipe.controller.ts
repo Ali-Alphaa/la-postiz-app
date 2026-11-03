@@ -24,6 +24,7 @@ import {
   SwipeLinkDto,
   SwipeQueryDto,
   SwipeRepurposeDto,
+  SwipeSourceDto,
   SwipeStarDto,
   SwipeStatusDto,
 } from '@gitroom/nestjs-libraries/dtos/swipe/swipe.dto';
@@ -79,6 +80,34 @@ export class SwipeController {
     @Body() body: SwipeFindDto
   ) {
     return this._swipeService.findExamples(org.id, body);
+  }
+
+  @Post('/pack')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  contentPack(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: SwipeSourceDto
+  ) {
+    return this._swipeService.contentPack(org.id, body);
+  }
+
+  @Post('/carousel')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  carousel(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: SwipeSourceDto
+  ) {
+    return this._swipeService.carousel(org.id, body);
+  }
+
+  @Get('/insights')
+  getInsights(@GetOrgFromRequest() org: Organization) {
+    return this._swipeService.getInsights(org.id);
+  }
+
+  @Post('/import-own')
+  importOwnBestPosts(@GetOrgFromRequest() org: Organization) {
+    return this._swipeService.importOwnBestPosts(org.id);
   }
 
   @Put('/:id')

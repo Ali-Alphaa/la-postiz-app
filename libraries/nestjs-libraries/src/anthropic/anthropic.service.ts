@@ -77,6 +77,30 @@ const SwipeExamplesPrompt = z.object({
   ),
 });
 
+const CarouselSlide = z.object({
+  title: z.string().describe('At most 8 words'),
+  body: z.string().describe('At most 30 words, empty when the title is enough'),
+});
+
+const ContentPackPrompt = z.object({
+  xThread: z
+    .array(z.string())
+    .describe('A thread of 3 to 7 posts, each 280 characters or less'),
+  linkedinPost: z.string().describe('One LinkedIn post, under 1300 characters'),
+  instagramCaption: z.string().describe('One Instagram caption'),
+  carouselSlides: z
+    .array(CarouselSlide)
+    .describe('5 to 8 slides, the first is the hook, the last a call to action'),
+  videoScript: z
+    .string()
+    .describe('A 30 to 45 second vertical video script with a hook, spoken lines and a call to action'),
+});
+
+const CarouselPrompt = z.object({
+  caption: z.string().describe('The caption of the post'),
+  slides: z.array(CarouselSlide),
+});
+
 // the public pages the swipe file search may read
 const SWIPE_DOMAINS = {
   x: ['x.com', 'twitter.com'],
@@ -518,5 +542,57 @@ Only list a post whose text you really read in a search result, and never invent
         outputTokens,
       },
     };
+  }
+
+  private packVoice(styleGuide?: string) {
+    return styleGuide?.trim()
+      ? `Write in the creator's voice, following their style guide:
+<style_guide>
+${styleGuide.trim()}
+</style_guide>`
+      : 'Keep the same tone and attitude as the source.';
+  }
+
+  // one source becomes native content for every platform
+  async contentPack(source: string, options: { styleGuide?: string }) {
+    return this.parse(
+      ContentPackPrompt,
+      `You turn one piece of content into native posts for several platforms, for a creator whose niche is ${NICHE}.
+${this.packVoice(options.styleGuide)}
+Rules:
+- Each format must feel native to its platform, not a copy of the others.
+- If the source is someone else's post, keep the structure that made it work but change the idea, examples and wording, and never mention its author.
+- No numbers, results, names or claims beyond what the source says. Never promise profits.
+- No hashtags, unless the style guide says the creator uses them.`,
+      `<source>\n${source}\n</source>`,
+      'medium'
+    );
+  }
+
+  async carouselFromText(
+    source: string,
+    options: { slides: number; styleGuide?: string }
+  ) {
+    return this.parse(
+      CarouselPrompt,
+      `You turn content into an Instagram or LinkedIn carousel for a creator whose niche is ${NICHE}.
+${this.packVoice(options.styleGuide)}
+Rules:
+- Exactly ${options.slides} slides. The first is a hook, the last a call to action, each one makes a single point.
+- Plain text only, no markdown or emoji.
+- No numbers, results, names or claims beyond what the source says. Never promise profits.`,
+      `<source>\n${source}\n</source>`,
+      'medium'
+    );
+  }
+
+  async writeWeeklyReview(data: unknown) {
+    return this.text(
+      `You review a creator's last week on social media. Their niche is ${NICHE}.
+Write a short review in markdown with these sections: What worked, What didn't, Do this week (3 specific actions), Repost or rework (1 or 2 posts from the data).
+Use only the numbers in the data, never invent any, and say plainly when there is too little data to conclude something. Do not open with praise.`,
+      JSON.stringify(data),
+      'medium'
+    );
   }
 }

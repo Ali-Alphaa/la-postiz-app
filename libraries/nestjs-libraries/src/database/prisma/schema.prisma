@@ -48,6 +48,10 @@ model Organization {
   growthSettings      GrowthSettings?
   swipeEntries        SwipeEntry[]
   swipeRuns           SwipeRun[]
+  brandKit            BrandKit?
+  conversions         Conversion[]
+  bioPage             BioPage?
+  weeklyReviews       WeeklyReview[]
   postEngagements     PostEngagement[]
   recycleSettings     RecycleSettings[]
   postRecycles        PostRecycle[]
@@ -2223,4 +2227,76 @@ enum SwipeOrigin {
   AI
   LINK
   MANUAL
+  OWN
+}
+
+// The colors and handle of the generated carousels
+model BrandKit {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  background     String
+  text           String
+  accent         String
+  handle         String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// A lead or sale reported by the user's website, postId comes from utm_content
+model Conversion {
+  id             String       @id @default(uuid())
+  organizationId String
+  type           String
+  value          Float        @default(0)
+  currency       String?
+  utmSource      String?
+  utmMedium      String?
+  utmCampaign    String?
+  utmContent     String?
+  postId         String?
+  externalId     String?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, externalId])
+  @@index([organizationId, createdAt])
+  @@index([postId])
+}
+
+model BioPage {
+  id             String       @id @default(uuid())
+  organizationId String       @unique
+  slug           String       @unique
+  title          String
+  bio            String?
+  avatar         String?
+  enabled        Boolean      @default(true)
+  links          Json         @default("[]")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clicks         BioClick[]
+}
+
+model BioClick {
+  id        String   @id @default(uuid())
+  bioPageId String
+  linkKey   String
+  createdAt DateTime @default(now())
+  bioPage   BioPage  @relation(fields: [bioPageId], references: [id], onDelete: Cascade)
+
+  @@index([bioPageId, createdAt])
+}
+
+model WeeklyReview {
+  id             String       @id @default(uuid())
+  organizationId String
+  weekStart      DateTime
+  summary        String       @db.Text
+  data           Json
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, weekStart])
 }

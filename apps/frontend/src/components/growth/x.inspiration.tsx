@@ -114,7 +114,11 @@ export const useOpenEditor = () => {
   const { data: integrations } = useGrowthIntegrations();
 
   return useCallback(
-    async (posts: string[], channelId?: string) => {
+    async (
+      posts: string[],
+      channelId?: string,
+      images?: Array<{ id: string; path: string }>
+    ) => {
       const date = (await (await fetch('/posts/find-slot')).json()).date;
       const list = (integrations || []).filter((p) => !p.disabled) as any[];
       modal.openModal({
@@ -133,7 +137,10 @@ export const useOpenEditor = () => {
             allIntegrations={list}
             integrations={list}
             selectedChannels={channelId ? [channelId] : []}
-            onlyValues={posts.map((p) => ({ content: textToHtml(p) }))}
+            onlyValues={posts.map((p, index) => ({
+              content: textToHtml(p),
+              ...(index === 0 && images?.length ? { image: images } : {}),
+            }))}
             reopenModal={() => {}}
             mutate={() => {}}
             date={fromUtc(date)}

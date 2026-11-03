@@ -332,14 +332,15 @@ export class PostActivity {
 
   // Adds the organization's UTM parameters to the links (only to what is
   // sent to the platform, the stored post is left as is). Never throws.
-  private async withUtm<T extends { content: string }>(
+  private async withUtm<T extends { content: string; id?: string }>(
     integration: Integration,
     posts: T[]
   ): Promise<T[]> {
     const contents = await this._growthSettingsService.applyUtm(
       integration.organizationId,
       integration.providerIdentifier,
-      (posts || []).map((p) => p.content)
+      (posts || []).map((p) => p.content),
+      posts?.[0]?.id
     );
 
     return (posts || []).map((p, index) => ({

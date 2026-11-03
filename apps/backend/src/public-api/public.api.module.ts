@@ -1,3 +1,4 @@
+import { PublicConversionsController } from '@gitroom/backend/public-api/routes/v1/public.conversions.controller';
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { AuthService } from '@gitroom/backend/services/auth/auth.service';
 import { StripeService } from '@gitroom/nestjs-libraries/services/stripe.service';
@@ -14,6 +15,7 @@ import { SuperAdminGuard } from '@gitroom/backend/services/auth/super.admin.guar
 import { PublicXController } from '@gitroom/backend/public-api/routes/v1/public.x.controller';
 
 const authenticatedController = [
+  PublicConversionsController,
   PublicIntegrationsController,
   PublicXController,
 ];

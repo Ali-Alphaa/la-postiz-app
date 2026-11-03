@@ -15,6 +15,8 @@ export interface UtmParams {
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
+  // the id of the post, to know which post a lead or sale came from
+  utm_content?: string;
 }
 
 export const DEFAULT_UTM_SOURCE = '{{provider}}';

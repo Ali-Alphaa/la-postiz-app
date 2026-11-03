@@ -1,5 +1,6 @@
 'use client';
 
+import { checkTradingCompliance } from '@gitroom/helpers/utils/trading.compliance';
 import React, {
   FC,
   ReactNode,
@@ -678,6 +679,28 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             setLoading(false);
             return;
           }
+        }
+      }
+
+      // a reminder before anything is scheduled, the user decides
+      if (type !== 'draft') {
+        const flags = checkTradingCompliance(
+          posts
+            .flatMap((p: any) => p.value.map((v: any) => v.content))
+            .join('\n')
+        );
+        if (
+          flags.length &&
+          !(await deleteDialog(
+            flags.map((p) => `${p.reason}: "${p.phrase}"`).join('\n'),
+            t('compliance_post_anyway', 'Continue anyway'),
+            t('compliance_title', 'Check this wording'),
+            t('compliance_go_back', 'Go back and edit'),
+            false
+          ))
+        ) {
+          setLoading(false);
+          return;
         }
       }
 

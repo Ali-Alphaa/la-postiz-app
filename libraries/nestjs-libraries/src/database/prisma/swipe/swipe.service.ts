@@ -15,9 +15,12 @@ import {
   SwipeLinkDto,
   SwipeQueryDto,
   SwipeRepurposeDto,
+  SwipeSourceDto,
 } from '@gitroom/nestjs-libraries/dtos/swipe/swipe.dto';
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { parseTweetUrl } from '@gitroom/helpers/utils/x.library';
+import { stripPostHtml } from '@gitroom/helpers/utils/trading.compliance';
+import { GrowthToolsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.service';
 
 const MAX_SEARCHES = 8;
 
@@ -50,7 +53,8 @@ export class SwipeService {
     private _swipeRepository: SwipeRepository,
     private _anthropicService: AnthropicService,
     private _xVoiceService: XVoiceService,
-    private _xInspirationService: XInspirationService
+    private _xInspirationService: XInspirationService,
+    private _growthToolsService: GrowthToolsService
   ) {}
 
   private async entryOrFail(orgId: string, id: string) {
@@ -248,5 +252,143 @@ export class SwipeService {
       SwipeStatus.INBOX,
       SwipeOrigin.LINK
     );
+  }
+
+  private async sourceOf(orgId: string, body: SwipeSourceDto) {
+    const text = body.entryId
+      ? (await this.entryOrFail(orgId, body.entryId)).content
+      : body.text?.trim();
+    if (!text) {
+      throw new BadRequestException('Pick a post or paste some text');
+    }
+
+    let styleGuide: string | undefined;
+    if (body.voiceHandle) {
+      const voice = await this._xVoiceService.resolve(orgId, {
+        voiceHandle: body.voiceHandle,
+      });
+      styleGuide = voice
+        ? this._xVoiceService.styleGuideOrFail(voice)
+        : undefined;
+    }
+    return { text, styleGuide };
+  }
+
+  async contentPack(orgId: string, body: SwipeSourceDto) {
+    if (!this._anthropicService.isAvailable()) {
+      return { available: false, pack: null, error: null as string | null };
+    }
+    const { text, styleGuide } = await this.sourceOf(orgId, body);
+    const result = await this._anthropicService.contentPack(text, {
+      styleGuide,
+    });
+    if (result.status !== 'ok') {
+      return { available: true, pack: null, error: result.status };
+    }
+    if (body.entryId) {
+      await this._swipeRepository.markRepurposed(orgId, body.entryId);
+    }
+    return { available: true, pack: result.data, error: null };
+  }
+
+  async carousel(orgId: string, body: SwipeSourceDto) {
+    if (!this._anthropicService.isAvailable()) {
+      return { available: false, carousel: null, error: null as string | null };
+    }
+    const { text, styleGuide } = await this.sourceOf(orgId, body);
+    const result = await this._anthropicService.carouselFromText(text, {
+      slides: body.slides || 6,
+      styleGuide,
+    });
+    if (result.status !== 'ok') {
+      return { available: true, carousel: null, error: result.status };
+    }
+    return { available: true, carousel: result.data, error: null };
+  }
+
+  // The organization's own best posts join the swipe file once, tagged by format
+  async importOwnBestPosts(orgId: string) {
+    const best = await this._growthToolsService.bestPosts(orgId, 60, 10);
+    const created: Array<{ id: string; text: string }> = [];
+    for (const row of best) {
+      const sourceUrl = row.post?.releaseURL;
+      const content = stripPostHtml(row.post?.content || '');
+      if (
+        !row.engagement ||
+        !sourceUrl ||
+        !content ||
+        (await this._swipeRepository.getBySourceUrl(orgId, sourceUrl, true))
+      ) {
+        continue;
+      }
+      const { id } = await this._swipeRepository.createEntry(
+        orgId,
+        {
+          content,
+          sourceUrl,
+          platform: row.post?.integration?.providerIdentifier,
+          author: row.post?.integration?.name,
+          collection: 'My best posts',
+        },
+        SwipeStatus.LIBRARY,
+        SwipeOrigin.OWN,
+        { engagement: row.engagement, impressions: row.impressions }
+      );
+      created.push({ id, text: content });
+    }
+
+    if (created.length && this._anthropicService.isAvailable()) {
+      const analysis = await this._anthropicService.analyzeViralTweets(
+        created.map((p) => ({ ...p, mediaType: 'none' }))
+      );
+      if (analysis.status === 'ok') {
+        for (const tags of analysis.data) {
+          if (created.some((p) => p.id === tags.id)) {
+            await this._swipeRepository.setTags(
+              orgId,
+              tags.id,
+              tags.format,
+              tags.topics
+            );
+          }
+        }
+      }
+    }
+    return { imported: created.length };
+  }
+
+  async importOwnBestPostsForAll() {
+    for (const {
+      organizationId,
+    } of await this._growthToolsService.organizationsWithGrowth()) {
+      try {
+        await this.importOwnBestPosts(organizationId);
+      } catch (err) {
+        console.log(err);
+      }
+    }
+  }
+
+  // which formats do best among the organization's own posts
+  async getInsights(orgId: string) {
+    const entries = await this._swipeRepository.getOwnEntries(orgId);
+    const formats = new Map<string, { posts: number; engagement: number }>();
+    for (const entry of entries) {
+      const key = entry.formatTag || 'untagged';
+      const row = formats.get(key) || { posts: 0, engagement: 0 };
+      row.posts++;
+      row.engagement += Number((entry.metrics as any)?.engagement) || 0;
+      formats.set(key, row);
+    }
+    return {
+      posts: entries.length,
+      formats: [...formats.entries()]
+        .map(([format, row]) => ({
+          format,
+          posts: row.posts,
+          averageEngagement: Math.round(row.engagement / row.posts),
+        }))
+        .sort((a, b) => b.averageEngagement - a.averageEngagement),
+    };
   }
 }

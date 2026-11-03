@@ -21,6 +21,12 @@ import {
   useSwipeRuns,
   useSwipeTechniques,
 } from '@gitroom/frontend/components/swipe/swipe.hooks';
+import {
+  ComplianceNote,
+  SwipeCarouselFromText,
+  SwipePack,
+} from '@gitroom/frontend/components/swipe/swipe.pack';
+import { useSwipeInsights } from '@gitroom/frontend/components/growth/growth.tools.hooks';
 
 const inputClass =
   'w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] outline-none text-textColor';
@@ -37,6 +43,7 @@ const ORIGIN_LABEL: Record<SwipeEntry['origin'], string> = {
   AI: 'Claude',
   LINK: 'Link',
   MANUAL: 'Manual',
+  OWN: 'My post',
 };
 
 // the known platforms, plus the one of the post when it is another one
@@ -288,6 +295,15 @@ const SwipeCard: FC<{ entry: SwipeEntry; edit: () => void }> = ({
     });
   }, [entry, t]);
 
+  const allPlatforms = useCallback(() => {
+    modals.openModal({
+      title: t('swipe_all_platforms', 'All platforms'),
+      withCloseButton: true,
+      size: '800px',
+      children: <SwipePack entry={entry} />,
+    });
+  }, [entry, t]);
+
   return (
     <GrowthCard className="flex flex-col gap-[12px]">
       <div className="flex gap-[6px] flex-wrap items-center">
@@ -307,6 +323,9 @@ const SwipeCard: FC<{ entry: SwipeEntry; edit: () => void }> = ({
       <EntryMeta entry={entry} />
       <div className="flex gap-[8px] items-center mt-auto">
         <Button onClick={repurpose}>{t('swipe_repurpose', 'Repurpose')}</Button>
+        <Button secondary={true} onClick={allPlatforms}>
+          {t('swipe_all_platforms', 'All platforms')}
+        </Button>
         <Button secondary={true} onClick={edit}>
           {t('edit', 'Edit')}
         </Button>
@@ -460,6 +479,7 @@ const SwipeRepurpose: FC<{ entry: SwipeEntry }> = ({ entry }) => {
             <Chip>{variant.technique}</Chip>
           </div>
           <div className="whitespace-pre-wrap">{variant.content}</div>
+          <ComplianceNote text={variant.content} />
           <div className="flex gap-[8px]">
             <Button onClick={() => openEditor([variant.content])}>
               {t('swipe_open_composer', 'Open in composer as draft')}
@@ -812,10 +832,106 @@ const SwipeInbox: FC = () => {
 const SwipeToolkit: FC = () => {
   const { data: techniques } = useSwipeTechniques();
   const { data: runs } = useSwipeRuns();
+  const { data: insights, mutate: mutateInsights } = useSwipeInsights();
+  const fetch = useFetch();
+  const modals = useModals();
+  const toaster = useToaster();
+  const [importing, setImporting] = useState(false);
   const t = useT();
+
+  const importOwn = useCallback(async () => {
+    setImporting(true);
+    try {
+      const response = await fetch('/swipe/import-own', { method: 'POST' });
+      const result = await response.json();
+      toaster.show(
+        response.ok
+          ? `${t('swipe_imported_own', 'Imported')} ${result.imported}`
+          : t('something_went_wrong', 'Something went wrong'),
+        response.ok ? 'success' : 'warning'
+      );
+      reloadEntries();
+      mutateInsights();
+    } finally {
+      setImporting(false);
+    }
+  }, [t, mutateInsights]);
+
+  const open = useCallback(
+    (kind: 'pack' | 'carousel') => () => {
+      modals.openModal({
+        title:
+          kind === 'pack'
+            ? t('swipe_all_platforms', 'All platforms')
+            : t('carousel_title', 'Carousel'),
+        withCloseButton: true,
+        size: '800px',
+        children: kind === 'pack' ? <SwipePack /> : <SwipeCarouselFromText />,
+      });
+    },
+    [t]
+  );
 
   return (
     <div className="grid grid-cols-2 mobile:grid-cols-1 gap-[16px]">
+      <GrowthCard className="flex flex-col gap-[10px]">
+        <div className="font-[600]">
+          {t('swipe_create', 'Create from text')}
+        </div>
+        <div className="text-[12px] text-textItemBlur">
+          {t(
+            'swipe_create_note',
+            'Paste a post, article or video transcript and turn it into content for every platform, or straight into carousel slides.'
+          )}
+        </div>
+        <div className="flex gap-[8px] flex-wrap">
+          <Button onClick={open('pack')}>
+            {t('swipe_all_platforms', 'All platforms')}
+          </Button>
+          <Button secondary={true} onClick={open('carousel')}>
+            {t('carousel_title', 'Carousel')}
+          </Button>
+        </div>
+      </GrowthCard>
+      <GrowthCard className="flex flex-col gap-[10px]">
+        <div className="font-[600]">
+          {t('swipe_whats_working', 'What works for you')}
+        </div>
+        <div className="text-[12px] text-textItemBlur">
+          {t(
+            'swipe_whats_working_note',
+            'Your best posts join the library by themselves every day. This shows how each format does on average.'
+          )}
+        </div>
+        {!insights?.formats?.length && (
+          <div className="text-[13px] text-textItemBlur">
+            {t('swipe_no_own', 'None of your posts have been imported yet.')}
+          </div>
+        )}
+        {(insights?.formats || []).map((row) => (
+          <div
+            key={row.format}
+            className="text-[13px] flex justify-between gap-[12px]"
+          >
+            <span>{row.format}</span>
+            <span className="text-textItemBlur">
+              {row.posts} {t('swipe_posts_lower', 'posts')} ·{' '}
+              {row.averageEngagement}{' '}
+              {t('swipe_avg_engagement', 'avg engagement')}
+            </span>
+          </div>
+        ))}
+        <div>
+          <Button
+            secondary={true}
+            onClick={importOwn}
+            loading={importing}
+            disabled={importing}
+          >
+            {t('swipe_import_own', 'Import my best posts now')}
+          </Button>
+        </div>
+      </GrowthCard>
       <GrowthCard className="flex flex-col gap-[10px]">
         <div className="font-[600]">
           {t('swipe_originality_toolkit', 'Originality toolkit (SCAMPER)')}
