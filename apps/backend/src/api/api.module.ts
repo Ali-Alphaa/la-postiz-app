@@ -56,6 +56,7 @@ import { FarcasterProvider } from '@gitroom/backend/services/auth/providers/farc
 import { WalletProvider } from '@gitroom/backend/services/auth/providers/wallet.provider';
 import { OauthProvider } from '@gitroom/backend/services/auth/providers/oauth.provider';
 import { StripeController } from '@gitroom/backend/api/routes/stripe.controller';
+import { SwipeController } from '@gitroom/backend/api/routes/swipe.controller';
 import { GrowthController } from '@gitroom/backend/api/routes/growth.controller';
 
 const authenticatedController = [
@@ -80,6 +81,7 @@ const authenticatedController = [
   AnnouncementsController,
   AdminController,
   GrowthController,
+  SwipeController,
 ];
 @Module({
   imports: [UploadModule],

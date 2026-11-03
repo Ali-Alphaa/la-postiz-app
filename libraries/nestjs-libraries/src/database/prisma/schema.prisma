@@ -46,6 +46,8 @@ model Organization {
   oauthApp            OAuthApp[]
   oauthAuthorizations OAuthAuthorization[]
   growthSettings      GrowthSettings?
+  swipeEntries        SwipeEntry[]
+  swipeRuns           SwipeRun[]
   postEngagements     PostEngagement[]
   recycleSettings     RecycleSettings[]
   postRecycles        PostRecycle[]
@@ -2162,4 +2164,63 @@ model Announcement {
   description String
   color       AnnouncementColor @default(INFO)
   createdAt   DateTime          @default(now())
+}
+
+// The master swipe file: posts of any platform kept as examples to learn from
+model SwipeEntry {
+  id               String       @id @default(uuid())
+  organizationId   String
+  status           SwipeStatus  @default(LIBRARY)
+  origin           SwipeOrigin  @default(MANUAL)
+  platform         String       @default("x")
+  content          String
+  threadParts      Json?
+  author           String?
+  sourceUrl        String?
+  formatTag        String?
+  topicTags        String[]     @default([])
+  whyItWorks       String?
+  metrics          Json?
+  collection       String?
+  imagePath        String?
+  notionBlockId    String?
+  starred          Boolean      @default(false)
+  lastRepurposedAt DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  deletedAt        DateTime?
+  organization     Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, notionBlockId])
+  @@index([organizationId, status])
+  @@index([organizationId, sourceUrl])
+  @@index([createdAt])
+  @@index([deletedAt])
+}
+
+// One "find examples" search of the swipe file, kept to see what it cost
+model SwipeRun {
+  id             String       @id @default(uuid())
+  organizationId String
+  topic          String
+  searches       Int          @default(0)
+  found          Int          @default(0)
+  inputTokens    Int          @default(0)
+  outputTokens   Int          @default(0)
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, createdAt])
+}
+
+enum SwipeStatus {
+  LIBRARY
+  INBOX
+}
+
+enum SwipeOrigin {
+  NOTION
+  AI
+  LINK
+  MANUAL
 }
