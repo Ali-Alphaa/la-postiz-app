@@ -1,4 +1,8 @@
 import {
+  InboxRemoteItem,
+  InboxReplyTarget,
+} from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
@@ -984,6 +988,54 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         status: 'success',
       },
     ];
+  }
+
+  // Comments of the posts. Page messages need another permission, not asked for.
+  async inboxItems(
+    id: string,
+    accessToken: string,
+    integration: Integration,
+    posts: Array<{ postId: string; releaseId: string }>
+  ): Promise<InboxRemoteItem[]> {
+    const items: InboxRemoteItem[] = [];
+    for (const post of posts) {
+      const { data } = await (
+        await this.fetch(
+          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,message,from,created_time&limit=50&access_token=${accessToken}`,
+          undefined,
+          'inbox comments'
+        )
+      ).json();
+      for (const comment of data || []) {
+        items.push({
+          kind: 'comment',
+          externalId: comment.id,
+          postId: post.postId,
+          authorId: comment.from?.id,
+          authorName: comment.from?.name,
+          text: comment.message || '',
+          receivedAt: new Date(comment.created_time),
+        });
+      }
+    }
+    return items;
+  }
+
+  async inboxReply(
+    id: string,
+    accessToken: string,
+    target: InboxReplyTarget,
+    text: string
+  ): Promise<void> {
+    await this.fetch(
+      `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${target.externalId}/comments?access_token=${accessToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text }),
+      },
+      'inbox reply'
+    );
   }
 
   async comment(

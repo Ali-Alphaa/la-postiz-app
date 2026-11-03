@@ -224,7 +224,7 @@ export const BulkSchedule: FC = () => {
           <Button
             onClick={submit}
             loading={loading}
-            disabled={!valid.length || loading}
+            disabled={!valid.length || loading || !!results.length}
           >
             {t('bulk_import', 'Import')} {valid.length || ''}
           </Button>

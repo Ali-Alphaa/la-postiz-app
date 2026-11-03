@@ -193,7 +193,7 @@ export const SwipeCarousel: FC<{
           background: current.background,
           text: current.text,
           accent: current.accent,
-          ...(current.handle ? { handle: current.handle } : {}),
+          handle: current.handle || null,
         }),
       });
       mutate();

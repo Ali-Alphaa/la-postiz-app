@@ -28,7 +28,7 @@ export const Revenue: FC = () => {
       title={t('revenue_tracking', 'Revenue tracking')}
       description={t(
         'revenue_tracking_description',
-        'Which post led to which signup or sale. Published links carry the post id in utm_content while UTM tracking is on, and your website reports each lead or sale to the Public API with those tags.'
+        'Which post led to which signup or sale. Published links carry the post id in utm_content while UTM tracking is on, and your website reports each lead or sale to the Public API with those tags. Links shortened when saving a post cannot be traced.'
       )}
     >
       <div className="flex flex-col gap-[16px]">
@@ -63,6 +63,12 @@ export const Revenue: FC = () => {
             value={data?.totals?.attributed ?? 0}
           />
         </div>
+        {(data?.currencies?.length || 0) > 1 && (
+          <div className="text-[12px] text-yellow-400">
+            {t('revenue_mixed', 'Sales value adds up different currencies:')}{' '}
+            {data?.currencies?.join(', ')}
+          </div>
+        )}
         <GrowthCard className="flex flex-col gap-[8px]">
           <div className="font-[600]">
             {t('revenue_by_post', 'Posts that brought results')}

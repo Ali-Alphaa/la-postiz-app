@@ -26,10 +26,16 @@ export class GrowthToolsRepository {
   }
 
   saveBrandKit(orgId: string, body: BrandKitDto) {
+    const data = {
+      background: body.background,
+      text: body.text,
+      accent: body.accent,
+      handle: body.handle || null,
+    };
     return this._brandKit.model.brandKit.upsert({
       where: { organizationId: orgId },
-      update: body,
-      create: { ...body, organizationId: orgId },
+      update: data,
+      create: { ...data, organizationId: orgId },
     });
   }
 
@@ -64,15 +70,27 @@ export class GrowthToolsRepository {
           externalId: body.externalId,
         },
       },
-      update: data,
+      update: {
+        type: body.type,
+        ...(body.value !== undefined ? { value: body.value } : {}),
+        ...(body.currency ? { currency: body.currency } : {}),
+        ...(body.utmSource ? { utmSource: body.utmSource } : {}),
+        ...(body.utmMedium ? { utmMedium: body.utmMedium } : {}),
+        ...(body.utmCampaign ? { utmCampaign: body.utmCampaign } : {}),
+        ...(body.utmContent ? { utmContent: body.utmContent } : {}),
+        ...(postId ? { postId } : {}),
+      },
       create: { ...data, organizationId: orgId, externalId: body.externalId },
       select: { id: true },
     });
   }
 
-  getConversions(orgId: string, since: Date) {
+  getConversions(orgId: string, since: Date, until?: Date) {
     return this._conversion.model.conversion.findMany({
-      where: { organizationId: orgId, createdAt: { gte: since } },
+      where: {
+        organizationId: orgId,
+        createdAt: { gte: since, ...(until ? { lt: until } : {}) },
+      },
       orderBy: { createdAt: 'desc' },
       take: 5000,
     });
@@ -97,6 +115,7 @@ export class GrowthToolsRepository {
       where: {
         organizationId: orgId,
         publishDate: { gte: from, lt: to },
+        post: { deletedAt: null },
       },
       orderBy: { engagement: 'desc' },
       take,
@@ -133,13 +152,20 @@ export class GrowthToolsRepository {
     return this._bioPage.model.bioPage.findUnique({ where: { slug } });
   }
 
+  // what visitors see: not the page of a deleted organization
+  getPublicBioPage(slug: string) {
+    return this._bioPage.model.bioPage.findFirst({
+      where: { slug, enabled: true, organization: { deletedAt: null } },
+    });
+  }
+
   saveBioPage(
     orgId: string,
     body: {
       slug: string;
       title: string;
-      bio?: string;
-      avatar?: string;
+      bio: string | null;
+      avatar: string | null;
       enabled: boolean;
       links: Prisma.InputJsonValue;
     }

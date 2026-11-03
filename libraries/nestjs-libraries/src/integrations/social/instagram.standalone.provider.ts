@@ -1,3 +1,4 @@
+import { InboxReplyTarget } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import {
   AuthTokenDetails,
   PostDetails,
@@ -34,6 +35,10 @@ export class InstagramStandaloneProvider
     'instagram_business_content_publish',
     'instagram_business_manage_comments',
     'instagram_business_manage_insights',
+    // only asked for when comment DMs and the DM inbox are turned on
+    ...(process.env.INSTAGRAM_DM_ACCESS === 'true'
+      ? ['instagram_business_manage_messages']
+      : []),
   ];
     override maxConcurrentJob = 200; // Instagram standalone has stricter limits
   dto = InstagramDto;
@@ -270,6 +275,55 @@ export class InstagramStandaloneProvider
       accessToken,
       postId,
       date,
+      'graph.instagram.com'
+    );
+  }
+
+  async inboxItems(
+    id: string,
+    token: string,
+    integration: Integration,
+    posts: Array<{ postId: string; releaseId: string }>
+  ) {
+    return instagramProvider.inboxItems(
+      id,
+      token,
+      integration,
+      posts,
+      'graph.instagram.com'
+    );
+  }
+
+  async inboxReply(
+    id: string,
+    token: string,
+    target: InboxReplyTarget,
+    text: string,
+    integration: Integration
+  ) {
+    return instagramProvider.inboxReply(
+      id,
+      token,
+      target,
+      text,
+      integration,
+      'graph.instagram.com'
+    );
+  }
+
+  async inboxPrivateReply(
+    id: string,
+    token: string,
+    commentId: string,
+    text: string,
+    integration: Integration
+  ) {
+    return instagramProvider.inboxPrivateReply(
+      id,
+      token,
+      commentId,
+      text,
+      integration,
       'graph.instagram.com'
     );
   }

@@ -8,6 +8,7 @@ import {
   Req,
   Res,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
@@ -27,6 +28,7 @@ import { OnlyURL } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
 import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { ssrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
 import { GrowthToolsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.service';
+import { ThrottlerRealIpGuard } from '@gitroom/nestjs-libraries/throttler/throttler.provider';
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 
 const pump = promisify(pipeline);
@@ -48,6 +50,7 @@ export class PublicController {
   }
 
   @Get('/bio/:slug/go/:key')
+  @UseGuards(ThrottlerRealIpGuard)
   async bioRedirect(
     @Param('slug') slug: string,
     @Param('key') key: string,

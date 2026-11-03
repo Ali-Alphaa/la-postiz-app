@@ -56,8 +56,8 @@ export const BioEditor: FC = () => {
         title,
         enabled,
         links,
-        ...(bio ? { bio } : {}),
-        ...(avatar ? { avatar } : {}),
+        bio: bio || null,
+        avatar: avatar || null,
       }),
     });
     if (!response.ok) {

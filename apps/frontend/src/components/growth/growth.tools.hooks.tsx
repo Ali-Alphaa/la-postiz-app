@@ -35,6 +35,7 @@ export interface RevenueRow {
 
 export interface Revenue {
   days: number;
+  currencies: string[];
   totals: RevenueRow & { attributed: number };
   sources: Array<RevenueRow & { source: string }>;
   posts: Array<

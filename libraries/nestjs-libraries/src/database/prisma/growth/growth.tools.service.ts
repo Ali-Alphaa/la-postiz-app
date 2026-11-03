@@ -32,6 +32,18 @@ const DEFAULT_BRAND = {
   handle: '',
 };
 
+// what a post said must not carry over to the next one (a YouTube or Reddit title)
+const withoutTitles = (value: any): any =>
+  Array.isArray(value)
+    ? value.map(withoutTitles)
+    : value && typeof value === 'object'
+    ? Object.fromEntries(
+        Object.entries(value)
+          .filter(([key]) => key !== 'title')
+          .map(([key, inner]) => [key, withoutTitles(inner)])
+      )
+    : value;
+
 const textToParagraphs = (text: string) =>
   text
     .split('\n')
@@ -112,7 +124,7 @@ export class GrowthToolsService {
       );
     } catch (err) {}
     const settings = {
-      ...lastSettings,
+      ...withoutTitles(lastSettings),
       __type: integration.providerIdentifier,
     };
     const value = [
@@ -218,6 +230,14 @@ export class GrowthToolsService {
 
     return {
       days,
+      // values are added up as they are: more than one means the total mixes them
+      currencies: [
+        ...new Set(
+          conversions
+            .filter((p) => p.type === 'sale' && p.currency)
+            .map((p) => p.currency!.toUpperCase())
+        ),
+      ],
       totals: {
         leads: conversions.filter((p) => p.type === 'lead').length,
         sales: conversions.filter((p) => p.type === 'sale').length,
@@ -267,8 +287,8 @@ export class GrowthToolsService {
     return this._repository.saveBioPage(orgId, {
       slug: body.slug,
       title: body.title,
-      bio: body.bio,
-      avatar: body.avatar,
+      bio: body.bio || null,
+      avatar: body.avatar || null,
       enabled: body.enabled,
       links: body.links.map((p) => ({
         key: p.key || makeId(10),
@@ -279,8 +299,8 @@ export class GrowthToolsService {
   }
 
   async getPublicBioPage(slug: string) {
-    const page = await this._repository.getBioPageBySlug(slug);
-    if (!page?.enabled) {
+    const page = await this._repository.getPublicBioPage(slug);
+    if (!page) {
       throw new NotFoundException('Page not found');
     }
     return {
@@ -297,8 +317,8 @@ export class GrowthToolsService {
 
   // Only a link stored on the page can be the target, so this is no open redirect
   async bioRedirect(slug: string, key: string) {
-    const page = await this._repository.getBioPageBySlug(slug);
-    const link = page?.enabled
+    const page = await this._repository.getPublicBioPage(slug);
+    const link = page
       ? (page.links as Array<{ key: string; url: string }>).find(
           (p) => p.key === key
         )
@@ -354,7 +374,8 @@ export class GrowthToolsService {
     );
     const conversions = await this._repository.getConversions(
       orgId,
-      weekStart.toDate()
+      weekStart.toDate(),
+      weekEnd.toDate()
     );
     const row = (p: (typeof posts)[number]) => ({
       channel: p.post?.integration?.name,

@@ -1,4 +1,8 @@
 import {
+  InboxRemoteItem,
+  InboxReplyTarget,
+} from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
+import {
   AnalyticsData,
   AuthTokenDetails,
   PendingCheckResponse,
@@ -42,6 +46,10 @@ export class InstagramProvider
     'instagram_content_publish',
     'instagram_manage_comments',
     'instagram_manage_insights',
+    // only asked for when comment DMs and the DM inbox are turned on
+    ...(process.env.INSTAGRAM_DM_ACCESS === 'true'
+      ? ['instagram_manage_messages']
+      : []),
   ];
   override maxConcurrentJob = 400;
   editor = 'normal' as const;
@@ -1092,6 +1100,116 @@ export class InstagramProvider
       pendingData = result.pendingData;
       await timer(30000);
     }
+  }
+
+  // Comments of the posts, and DMs when the channel was connected with them
+  async inboxItems(
+    id: string,
+    token: string,
+    integration: Integration,
+    posts: Array<{ postId: string; releaseId: string }>,
+    type = 'graph.facebook.com'
+  ): Promise<InboxRemoteItem[]> {
+    const [accessToken] = token.split('___');
+    const items: InboxRemoteItem[] = [];
+
+    for (const post of posts) {
+      const { data } = await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,text,username,timestamp,from&limit=50&access_token=${accessToken}`,
+          undefined,
+          'inbox comments'
+        )
+      ).json();
+      for (const comment of data || []) {
+        items.push({
+          kind: 'comment',
+          externalId: comment.id,
+          postId: post.postId,
+          authorId: comment.from?.id,
+          authorName: comment.username,
+          text: comment.text || '',
+          receivedAt: new Date(comment.timestamp),
+        });
+      }
+    }
+
+    if (process.env.INSTAGRAM_DM_ACCESS === 'true') {
+      const { data } = await (
+        await this.fetch(
+          `https://${type}/${META_GRAPH_API_VERSION}/${id}/conversations?platform=instagram&fields=id,messages.limit(5){id,from,message,created_time}&limit=25&access_token=${accessToken}`,
+          undefined,
+          'inbox conversations'
+        )
+      ).json();
+      for (const conversation of data || []) {
+        for (const message of conversation.messages?.data || []) {
+          items.push({
+            kind: 'dm',
+            externalId: message.id,
+            threadId: conversation.id,
+            authorId: message.from?.id,
+            authorName: message.from?.username,
+            text: message.message || '',
+            receivedAt: new Date(message.created_time),
+          });
+        }
+      }
+    }
+
+    return items;
+  }
+
+  async inboxReply(
+    id: string,
+    token: string,
+    target: InboxReplyTarget,
+    text: string,
+    integration: Integration,
+    type = 'graph.facebook.com'
+  ): Promise<void> {
+    const [accessToken] = token.split('___');
+    if (target.kind === 'comment') {
+      await this.fetch(
+        `https://${type}/${META_GRAPH_API_VERSION}/${target.externalId}/replies?message=${encodeURIComponent(
+          text
+        )}&access_token=${accessToken}`,
+        { method: 'POST' },
+        'inbox reply'
+      );
+      return;
+    }
+    await this.inboxMessage(id, accessToken, { id: target.authorId }, text, type);
+  }
+
+  async inboxPrivateReply(
+    id: string,
+    token: string,
+    commentId: string,
+    text: string,
+    integration: Integration,
+    type = 'graph.facebook.com'
+  ): Promise<void> {
+    const [accessToken] = token.split('___');
+    await this.inboxMessage(id, accessToken, { comment_id: commentId }, text, type);
+  }
+
+  private async inboxMessage(
+    id: string,
+    accessToken: string,
+    recipient: { id?: string; comment_id?: string },
+    text: string,
+    type: string
+  ) {
+    await this.fetch(
+      `https://${type}/${META_GRAPH_API_VERSION}/${id}/messages?access_token=${accessToken}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipient, message: { text } }),
+      },
+      'inbox message'
+    );
   }
 
   async comment(

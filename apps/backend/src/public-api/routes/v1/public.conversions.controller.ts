@@ -6,7 +6,8 @@ import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.reque
 import { GrowthToolsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.service';
 import { ConversionDto } from '@gitroom/nestjs-libraries/dtos/growth/growth.tools.dto';
 
-// Used by the user's own website: a lead or sale, with the UTM tags of the visit
+// Called from the server of the user's own website, never from a browser: the
+// API key can do everything. A lead or sale, with the UTM tags of the visit.
 @ApiTags('Public API')
 @Controller('/public/v1/conversions')
 export class PublicConversionsController {

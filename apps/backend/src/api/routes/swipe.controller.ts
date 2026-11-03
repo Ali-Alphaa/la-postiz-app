@@ -106,6 +106,7 @@ export class SwipeController {
   }
 
   @Post('/import-own')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   importOwnBestPosts(@GetOrgFromRequest() org: Organization) {
     return this._swipeService.importOwnBestPosts(org.id);
   }

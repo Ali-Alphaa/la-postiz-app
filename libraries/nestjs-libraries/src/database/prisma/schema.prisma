@@ -52,6 +52,8 @@ model Organization {
   conversions         Conversion[]
   bioPage             BioPage?
   weeklyReviews       WeeklyReview[]
+  inboxItems          InboxItem[]
+  dmAutomations       DmAutomation[]
   postEngagements     PostEngagement[]
   recycleSettings     RecycleSettings[]
   postRecycles        PostRecycle[]
@@ -431,6 +433,8 @@ model Integration {
   @@index([inBetweenSteps])
   @@index([refreshNeeded])
   @@index([disabled])
+  inboxItems            InboxItem[]
+  dmAutomations         DmAutomation[]
 }
 
 model Signatures {
@@ -2299,4 +2303,52 @@ model WeeklyReview {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, weekStart])
+}
+
+// A comment or direct message from a connected channel
+model InboxItem {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String
+  kind           String
+  externalId     String
+  threadId       String?
+  postId         String?
+  authorId       String?
+  authorName     String?
+  text           String
+  status         String       @default("OPEN")
+  reply          String?
+  repliedAt      DateTime?
+  automationId   String?
+  dmSentAt       DateTime?
+  dmError        String?
+  receivedAt     DateTime
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, externalId])
+  @@index([organizationId, status, receivedAt])
+  @@index([automationId, authorId])
+}
+
+// A keyword in a comment sends a direct message
+model DmAutomation {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String
+  postId         String?
+  keyword        String
+  dmText         String
+  publicReply    String?
+  enabled        Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([integrationId, enabled])
 }
