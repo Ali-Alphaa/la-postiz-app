@@ -103,6 +103,27 @@ export const useMenuItem = () => {
       path: '/growth',
     },
     {
+      name: t('swipe_file', 'Swipe File'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="21"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <path
+            d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/swipe',
+    },
+    {
       name: t('media', 'Media'),
       icon: (
         <svg

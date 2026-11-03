@@ -77,7 +77,7 @@ const useXChannels = () => {
 };
 
 // a failed AI call, as a message for the user
-const useAiError = () => {
+export const useAiError = () => {
   const t = useT();
   return useCallback(
     (result: { available: boolean; error: string | null }) => {
@@ -108,7 +108,7 @@ const useAiError = () => {
   );
 };
 
-const useOpenEditor = () => {
+export const useOpenEditor = () => {
   const fetch = useFetch();
   const modal = useModals();
   const { data: integrations } = useGrowthIntegrations();
@@ -584,6 +584,7 @@ const TweetCard: FC<{
   onRewrite: () => void;
   rewriting: boolean;
   onHide: () => void;
+  onSaveToSwipe: () => void;
 }> = ({
   tweet,
   selected,
@@ -592,6 +593,7 @@ const TweetCard: FC<{
   onRewrite,
   rewriting,
   onHide,
+  onSaveToSwipe,
 }) => {
   const t = useT();
   return (
@@ -677,6 +679,9 @@ const TweetCard: FC<{
       <div className="flex gap-[8px] items-center">
         <Button onClick={onRewrite} loading={rewriting}>
           {t('rewrite_in_my_voice', 'Rewrite in my voice')}
+        </Button>
+        <Button secondary={true} onClick={onSaveToSwipe}>
+          {t('save_to_swipe_file', 'Save to Swipe File')}
         </Button>
         <button
           type="button"
@@ -881,6 +886,38 @@ export const XInspiration: FC = () => {
       reload();
     },
     [reload]
+  );
+
+  const saveToSwipe = useCallback(
+    (tweet: {
+        text: string;
+        url: string;
+        authorHandle: string;
+        format?: string | null;
+        topics?: string[];
+      }) =>
+      async () => {
+        const response = await fetch('/swipe', {
+          method: 'POST',
+          body: JSON.stringify({
+            content: tweet.text,
+            platform: 'x',
+            author: tweet.authorHandle,
+            sourceUrl: tweet.url,
+            formatTag: tweet.format || undefined,
+            topicTags: tweet.topics || [],
+            collection: 'X Inspiration',
+          }),
+        });
+        const saved = response.ok || response.status === 409;
+        toaster.show(
+          saved
+            ? t('saved_to_swipe_file', 'Saved to the Swipe File')
+            : t('something_went_wrong', 'Something went wrong'),
+          saved ? 'success' : 'warning'
+        );
+      },
+    [t]
   );
 
   const toggle = useCallback(
@@ -1143,6 +1180,7 @@ export const XInspiration: FC = () => {
               onRewrite={rewrite(tweet)}
               rewriting={busy === `rewrite-${tweet.id}`}
               onHide={hide(tweet.id)}
+              onSaveToSwipe={saveToSwipe(tweet)}
             />
           ))}
         </div>

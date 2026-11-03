@@ -55,6 +55,36 @@ const RepurposePrompt = z.object({
     .describe('Exactly 5 variations'),
 });
 
+const SwipeRepurposePrompt = z.object({
+  variants: z.array(
+    z.object({
+      technique: z.string().describe('The key of the technique used'),
+      content: z.string(),
+    })
+  ),
+});
+
+const SwipeExamplesPrompt = z.object({
+  examples: z.array(
+    z.object({
+      platform: z.enum(['x', 'instagram']),
+      content: z.string().describe('The exact text of the post'),
+      author: z.string(),
+      sourceUrl: z.string(),
+      formatTag: z.string().describe('Short name of the format of the post'),
+      whyItWorks: z.string().describe('One sentence'),
+    })
+  ),
+});
+
+// the public pages the swipe file search may read
+const SWIPE_DOMAINS = {
+  x: ['x.com', 'twitter.com'],
+  instagram: ['instagram.com'],
+};
+// a long search can pause, it is resumed at most this many times
+const MAX_SEARCH_TURNS = 4;
+
 export type AiStatus =
   | 'ok'
   | 'unavailable'
@@ -325,5 +355,168 @@ Rules:
     }
 
     return { status: 'error' };
+  }
+
+  // one rewrite of a swipe file post per SCAMPER technique
+  async repurposeSwipeEntry(
+    entry: {
+      content: string;
+      platform: string;
+      formatTag?: string | null;
+      whyItWorks?: string | null;
+    },
+    techniques: ReadonlyArray<{ key: string; hint: string }>,
+    options: { platform: string; styleGuide?: string; topic?: string }
+  ): Promise<AiResult<Array<{ technique: string; content: string }>>> {
+    const voice = options.styleGuide?.trim()
+      ? `Write in the creator's voice, following their style guide:
+<style_guide>
+${options.styleGuide.trim()}
+</style_guide>`
+      : 'Keep the same tone and attitude as the source post.';
+
+    const result = await this.parse(
+      SwipeRepurposePrompt,
+      `You turn a high-performing social media post into original posts for a creator whose niche is ${NICHE}.
+Target platform: ${options.platform}. Respect its normal length and style.
+${voice}
+Rules:
+- Write exactly one variant per technique, in the order they are given.
+- Keep the structure that made the source work, but change the idea, the examples and the wording. Never copy its phrases and never mention its author.
+- Write confidently and simply, with no hedging.
+- No numbers, results, names or claims you cannot be sure of.
+- No hashtags, unless the style guide says the creator uses them.`,
+      `<source format="${entry.formatTag || 'unknown'}">
+${entry.content}
+</source>
+${entry.whyItWorks ? `<why_it_works>${entry.whyItWorks}</why_it_works>\n` : ''}${
+        options.topic ? `<topic>${options.topic}</topic>\n` : ''
+      }<techniques>
+${techniques.map((p) => `- ${p.key}: ${p.hint}`).join('\n')}
+</techniques>`,
+      'medium'
+    );
+
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return { status: 'ok', data: result.data.variants };
+  }
+
+  // Claude searches the public web, then its notes are turned into rows. A
+  // post is only kept when its link really came back from the search.
+  async findSwipeExamples(
+    topic: string,
+    platform: 'x' | 'instagram' | 'both',
+    count: number,
+    maxSearches: number
+  ) {
+    if (!this.isAvailable()) {
+      return { status: 'unavailable' as const };
+    }
+
+    const domains =
+      platform === 'both'
+        ? [...SWIPE_DOMAINS.x, ...SWIPE_DOMAINS.instagram]
+        : SWIPE_DOMAINS[platform];
+    const urls = new Set<string>();
+    let notes = '';
+    let searches = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+
+    try {
+      const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [
+        {
+          role: 'user',
+          content: `Find ${count} high-performing public posts about: ${topic}`,
+        },
+      ];
+
+      for (let turn = 0; turn < MAX_SEARCH_TURNS; turn++) {
+        const response = await this.client.beta.messages.create({
+          model: this.model,
+          max_tokens: MAX_TOKENS,
+          betas: [FALLBACK_BETA],
+          fallbacks: 'default',
+          system: `You find real, publicly visible, high-performing social media posts for a creator's swipe file.
+Use web search. List each post with its exact text, its author and its link.
+Only list a post whose text you really read in a search result, and never invent, complete or paraphrase one. It is fine to list fewer posts, or none.`,
+          messages,
+          tools: [
+            {
+              type: 'web_search_20260209',
+              name: 'web_search',
+              max_uses: maxSearches,
+              allowed_domains: domains,
+            },
+          ],
+          output_config: { effort: 'medium' },
+        });
+
+        inputTokens += response.usage.input_tokens;
+        outputTokens += response.usage.output_tokens;
+        searches += response.usage.server_tool_use?.web_search_requests || 0;
+
+        if (response.stop_reason === 'refusal') {
+          this._logger.warn('Anthropic declined the request');
+          return { status: 'refusal' as const };
+        }
+
+        for (const block of response.content) {
+          if (block.type === 'text') {
+            notes += block.text;
+          }
+          if (
+            block.type === 'web_search_tool_result' &&
+            Array.isArray(block.content)
+          ) {
+            block.content.forEach((p) => urls.add(p.url));
+          }
+        }
+
+        // the tool stays the same between turns, so a search that pauses
+        // after spending its budget is not resumed
+        if (
+          response.stop_reason !== 'pause_turn' ||
+          searches >= maxSearches
+        ) {
+          break;
+        }
+        messages.push({ role: 'assistant', content: response.content });
+      }
+    } catch (err) {
+      return this.failure(err);
+    }
+
+    if (!urls.size || !notes.trim()) {
+      return {
+        status: 'ok' as const,
+        data: { examples: [], searches, inputTokens, outputTokens },
+      };
+    }
+
+    const parsed = await this.parse(
+      SwipeExamplesPrompt,
+      `Extract the social media posts listed in these research notes, at most ${count}. Copy their text exactly. Leave out anything that is not a specific post with a link.`,
+      notes,
+      'low'
+    );
+    if (parsed.status !== 'ok') {
+      return parsed;
+    }
+
+    return {
+      status: 'ok' as const,
+      data: {
+        examples: parsed.data.examples
+          .filter((p) => p.content.trim() && urls.has(p.sourceUrl))
+          .slice(0, count),
+        searches,
+        inputTokens,
+        outputTokens,
+      },
+    };
   }
 }
