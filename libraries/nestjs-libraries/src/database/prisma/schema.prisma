@@ -2189,7 +2189,7 @@ model SwipeEntry {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
   deletedAt        DateTime?
-  organization     Organization @relation(fields: [organizationId], references: [id])
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, notionBlockId])
   @@index([organizationId, status])
@@ -2208,7 +2208,7 @@ model SwipeRun {
   inputTokens    Int          @default(0)
   outputTokens   Int          @default(0)
   createdAt      DateTime     @default(now())
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, createdAt])
 }

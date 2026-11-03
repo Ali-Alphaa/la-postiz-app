@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useCallback, useState } from 'react';
+import { FC, useCallback, useEffect, useState } from 'react';
 import clsx from 'clsx';
 import { mutate as mutateSwr } from 'swr';
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
@@ -11,7 +11,10 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useModals } from '@gitroom/frontend/components/layout/new-modal';
 import { useXVoices } from '@gitroom/frontend/components/growth/growth.hooks';
 import { GrowthCard } from '@gitroom/frontend/components/growth/channel.select';
-import { useOpenEditor } from '@gitroom/frontend/components/growth/x.inspiration';
+import {
+  useAiError,
+  useOpenEditor,
+} from '@gitroom/frontend/components/growth/x.inspiration';
 import {
   SwipeEntry,
   useSwipeEntries,
@@ -36,6 +39,12 @@ const ORIGIN_LABEL: Record<SwipeEntry['origin'], string> = {
   MANUAL: 'Manual',
 };
 
+// the known platforms, plus the one of the post when it is another one
+const platformOptions = (current: string) =>
+  PLATFORMS.some((p) => p.value === current)
+    ? PLATFORMS
+    : [...PLATFORMS, { value: current, label: current }];
+
 const DEFAULT_TECHNIQUES = ['substitute', 'modify', 'reverse'];
 
 // every list of entries is refreshed: an approved post moves between them
@@ -49,30 +58,6 @@ const Chip: FC<{ children: string }> = ({ children }) => (
     {children}
   </span>
 );
-
-const useAiError = () => {
-  const t = useT();
-  return useCallback(
-    (result: { available?: boolean; error?: string | null }) => {
-      if (result.available === false) {
-        return t(
-          'swipe_ai_unavailable',
-          'Claude is not configured: set ANTHROPIC_API_KEY on the server'
-        );
-      }
-      if (result.error === 'rate_limited') {
-        return t('swipe_ai_rate_limited', 'Claude is busy, try again shortly');
-      }
-      if (result.error === 'refusal') {
-        return t('swipe_ai_refusal', 'Claude declined this post');
-      }
-      return result.error
-        ? t('something_went_wrong', 'Something went wrong')
-        : '';
-    },
-    [t]
-  );
-};
 
 export const SwipeComponent: FC = () => {
   const [tab, setTab] = useState<'library' | 'inbox' | 'toolkit'>('library');
@@ -152,6 +137,7 @@ const EntryMeta: FC<{ entry: SwipeEntry }> = ({ entry }) => {
 };
 
 const SwipeLibrary: FC = () => {
+  const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
   const [formatTag, setFormatTag] = useState('');
   const [collection, setCollection] = useState('');
@@ -163,6 +149,13 @@ const SwipeLibrary: FC = () => {
     starred,
   });
   const { data: all } = useSwipeEntries('LIBRARY', {});
+
+  // the search is sent after the user stops typing
+  useEffect(() => {
+    const timeout = setTimeout(() => setQ(search), 400);
+    return () => clearTimeout(timeout);
+  }, [search]);
+
   const modals = useModals();
   const t = useT();
 
@@ -198,8 +191,8 @@ const SwipeLibrary: FC = () => {
         <input
           className={clsx(inputClass, 'max-w-[280px]')}
           placeholder={t('swipe_search', 'Search posts, authors, tags')}
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
         <select
           className={clsx(inputClass, 'max-w-[220px]')}
@@ -421,7 +414,7 @@ const SwipeRepurpose: FC<{ entry: SwipeEntry }> = ({ entry }) => {
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
         >
-          {PLATFORMS.map((p) => (
+          {platformOptions(platform).map((p) => (
             <option key={p.value} value={p.value}>
               {p.label}
             </option>
@@ -522,7 +515,12 @@ const SwipeEntryForm: FC<{ entry?: SwipeEntry; done: () => void }> = ({
     });
     if (!response.ok) {
       toaster.show(
-        t('swipe_save_failed', 'Could not save: check the original URL'),
+        response.status === 409
+          ? t(
+              'swipe_duplicate',
+              'This post is already in your swipe file or inbox'
+            )
+          : t('swipe_save_failed', 'Could not save: check the original URL'),
         'warning'
       );
       return;
@@ -556,7 +554,7 @@ const SwipeEntryForm: FC<{ entry?: SwipeEntry; done: () => void }> = ({
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
         >
-          {PLATFORMS.map((p) => (
+          {platformOptions(platform).map((p) => (
             <option key={p.value} value={p.value}>
               {p.label}
             </option>

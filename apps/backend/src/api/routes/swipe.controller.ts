@@ -11,6 +11,11 @@ import {
 import { GetOrgFromRequest } from '@gitroom/nestjs-libraries/user/org.from.request';
 import { Organization } from '@prisma/client';
 import { ApiTags } from '@nestjs/swagger';
+import { CheckPolicies } from '@gitroom/backend/services/auth/permissions/permissions.ability';
+import {
+  AuthorizationActions,
+  Sections,
+} from '@gitroom/backend/services/auth/permissions/permission.exception.class';
 import { SwipeService } from '@gitroom/nestjs-libraries/database/prisma/swipe/swipe.service';
 import {
   ImportSwipeDto,
@@ -68,6 +73,7 @@ export class SwipeController {
   }
 
   @Post('/find')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   findExamples(
     @GetOrgFromRequest() org: Organization,
     @Body() body: SwipeFindDto
@@ -103,6 +109,7 @@ export class SwipeController {
   }
 
   @Post('/:id/repurpose')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
   repurpose(
     @GetOrgFromRequest() org: Organization,
     @Param('id') id: string,

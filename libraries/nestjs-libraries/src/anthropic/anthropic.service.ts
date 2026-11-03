@@ -476,7 +476,12 @@ Only list a post whose text you really read in a search result, and never invent
           }
         }
 
-        if (response.stop_reason !== 'pause_turn') {
+        // the tool stays the same between turns, so a search that pauses
+        // after spending its budget is not resumed
+        if (
+          response.stop_reason !== 'pause_turn' ||
+          searches >= maxSearches
+        ) {
           break;
         }
         messages.push({ role: 'assistant', content: response.content });

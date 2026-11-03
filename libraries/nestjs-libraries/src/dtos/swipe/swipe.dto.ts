@@ -67,15 +67,19 @@ export class SwipeEntryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   platform?: string;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(50)
   @IsString({ each: true })
+  @MaxLength(20000, { each: true })
   threadParts?: string[];
 
   @IsOptional()
   @IsString()
+  @MaxLength(200)
   author?: string;
 
   @IsOptional()
@@ -84,19 +88,24 @@ export class SwipeEntryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   formatTag?: string;
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(30)
   @IsString({ each: true })
+  @MaxLength(200, { each: true })
   topicTags?: string[];
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   whyItWorks?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   collection?: string;
 
   @IsOptional()
@@ -109,6 +118,7 @@ export class SwipeEntryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   notionBlockId?: string;
 }
 
@@ -161,6 +171,7 @@ export class SwipeRepurposeDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   platform?: string;
 
   @IsOptional()
@@ -171,6 +182,7 @@ export class SwipeRepurposeDto {
   // empty: keep the tone of the source post
   @IsOptional()
   @IsString()
+  @MaxLength(30)
   voiceHandle?: string;
 }
 

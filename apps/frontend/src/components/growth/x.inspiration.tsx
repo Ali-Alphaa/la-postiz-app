@@ -77,7 +77,7 @@ const useXChannels = () => {
 };
 
 // a failed AI call, as a message for the user
-const useAiError = () => {
+export const useAiError = () => {
   const t = useT();
   return useCallback(
     (result: { available: boolean; error: string | null }) => {
@@ -909,11 +909,12 @@ export const XInspiration: FC = () => {
             collection: 'X Inspiration',
           }),
         });
+        const saved = response.ok || response.status === 409;
         toaster.show(
-          response.ok
+          saved
             ? t('saved_to_swipe_file', 'Saved to the Swipe File')
             : t('something_went_wrong', 'Something went wrong'),
-          response.ok ? 'success' : 'warning'
+          saved ? 'success' : 'warning'
         );
       },
     [t]

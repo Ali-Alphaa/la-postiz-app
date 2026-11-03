@@ -367,7 +367,7 @@ export class XInspirationService {
 
   // The free oEmbed endpoint of X (no API key, no cost). Only the id and the
   // handle of the pasted link are used, the host is fixed.
-  private async readTweet(parsed: { id: string; handle: string | null }) {
+  async readTweet(parsed: { id: string; handle: string | null }) {
     try {
       const response = await fetch(
         `https://publish.twitter.com/oembed?url=${encodeURIComponent(

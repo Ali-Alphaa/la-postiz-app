@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -15,21 +16,56 @@ import {
   SwipeQueryDto,
   SwipeRepurposeDto,
 } from '@gitroom/nestjs-libraries/dtos/swipe/swipe.dto';
-import {
-  oembedHtmlToTweet,
-  parseTweetUrl,
-} from '@gitroom/helpers/utils/x.library';
+import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
+import { parseTweetUrl } from '@gitroom/helpers/utils/x.library';
 
-const OEMBED_TIMEOUT = 8000;
 const MAX_SEARCHES = 8;
+
+const PLATFORM_HOSTS: Record<string, string> = {
+  'instagram.com': 'instagram',
+  'threads.net': 'threads',
+  'threads.com': 'threads',
+  'linkedin.com': 'linkedin',
+  'tiktok.com': 'tiktok',
+  'youtube.com': 'youtube',
+  'youtu.be': 'youtube',
+  'facebook.com': 'facebook',
+  'reddit.com': 'reddit',
+};
+
+// every link of a tweet is stored the same way, so the same post is found again
+const canonicalUrl = (url: string) => parseTweetUrl(url)?.url || url;
+
+const platformOfUrl = (url: string) => {
+  const host = new URL(url).hostname.toLowerCase();
+  const known = Object.keys(PLATFORM_HOSTS).find(
+    (p) => host === p || host.endsWith(`.${p}`)
+  );
+  return known ? PLATFORM_HOSTS[known] : 'other';
+};
 
 @Injectable()
 export class SwipeService {
   constructor(
     private _swipeRepository: SwipeRepository,
     private _anthropicService: AnthropicService,
-    private _xVoiceService: XVoiceService
+    private _xVoiceService: XVoiceService,
+    private _xInspirationService: XInspirationService
   ) {}
+
+  private async entryOrFail(orgId: string, id: string) {
+    const entry = await this._swipeRepository.getEntry(orgId, id);
+    if (!entry) {
+      throw new NotFoundException('Swipe entry not found');
+    }
+    return entry;
+  }
+
+  private withCanonicalUrl(entry: SwipeEntryDto): SwipeEntryDto {
+    return entry.sourceUrl
+      ? { ...entry, sourceUrl: canonicalUrl(entry.sourceUrl) }
+      : entry;
+  }
 
   getTechniques() {
     return SWIPE_TECHNIQUES;
@@ -39,40 +75,52 @@ export class SwipeService {
     return this._swipeRepository.getEntries(orgId, query);
   }
 
-  // saving the same post twice returns the row it already has
-  async createEntry(orgId: string, entry: SwipeEntryDto) {
-    const existing = entry.sourceUrl
-      ? await this._swipeRepository.getBySourceUrl(orgId, entry.sourceUrl)
-      : null;
-    return (
-      existing ||
-      this._swipeRepository.createEntry(
-        orgId,
-        entry,
-        SwipeStatus.LIBRARY,
-        SwipeOrigin.MANUAL
-      )
+  // a post is kept once: the message tells the frontend it is already saved
+  async createEntry(orgId: string, body: SwipeEntryDto) {
+    const entry = this.withCanonicalUrl(body);
+    if (
+      entry.sourceUrl &&
+      (await this._swipeRepository.getBySourceUrl(orgId, entry.sourceUrl))
+    ) {
+      throw new ConflictException('duplicate');
+    }
+    return this._swipeRepository.createEntry(
+      orgId,
+      entry,
+      SwipeStatus.LIBRARY,
+      SwipeOrigin.MANUAL
     );
   }
 
-  updateEntry(orgId: string, id: string, entry: SwipeEntryDto) {
-    return this._swipeRepository.updateEntry(orgId, id, entry);
+  async updateEntry(orgId: string, id: string, entry: SwipeEntryDto) {
+    await this.entryOrFail(orgId, id);
+    return this._swipeRepository.updateEntry(
+      orgId,
+      id,
+      this.withCanonicalUrl(entry)
+    );
   }
 
-  setStatus(orgId: string, id: string, status: SwipeStatus) {
+  async setStatus(orgId: string, id: string, status: SwipeStatus) {
+    await this.entryOrFail(orgId, id);
     return this._swipeRepository.setStatus(orgId, id, status);
   }
 
-  setStarred(orgId: string, id: string, starred: boolean) {
+  async setStarred(orgId: string, id: string, starred: boolean) {
+    await this.entryOrFail(orgId, id);
     return this._swipeRepository.setStarred(orgId, id, starred);
   }
 
-  deleteEntry(orgId: string, id: string) {
+  async deleteEntry(orgId: string, id: string) {
+    await this.entryOrFail(orgId, id);
     return this._swipeRepository.deleteEntry(orgId, id);
   }
 
   importEntries(orgId: string, entries: SwipeEntryDto[]) {
-    return this._swipeRepository.importEntries(orgId, entries);
+    return this._swipeRepository.importEntries(
+      orgId,
+      entries.map((p) => this.withCanonicalUrl(p))
+    );
   }
 
   getRuns(orgId: string) {
@@ -88,10 +136,7 @@ export class SwipeService {
       };
     }
 
-    const entry = await this._swipeRepository.getEntry(orgId, id);
-    if (!entry) {
-      throw new NotFoundException('Swipe entry not found');
-    }
+    const entry = await this.entryOrFail(orgId, id);
 
     let styleGuide: string | undefined;
     if (body.voiceHandle) {
@@ -138,14 +183,13 @@ export class SwipeService {
 
     let found = 0;
     for (const example of result.data.examples) {
-      if (
-        await this._swipeRepository.getBySourceUrl(orgId, example.sourceUrl)
-      ) {
+      const sourceUrl = canonicalUrl(example.sourceUrl);
+      if (await this._swipeRepository.getBySourceUrl(orgId, sourceUrl, true)) {
         continue;
       }
       await this._swipeRepository.createEntry(
         orgId,
-        { ...example, topicTags: [body.topic.toLowerCase()] },
+        { ...example, sourceUrl, topicTags: [body.topic.toLowerCase()] },
         SwipeStatus.INBOX,
         SwipeOrigin.AI
       );
@@ -168,40 +212,22 @@ export class SwipeService {
     };
   }
 
-  // The free oEmbed endpoint of X reads tweets, nothing is scraped. Other
-  // platforms have no free equivalent, so the user pastes the text.
-  private async readTweet(parsed: { id: string; handle: string | null }) {
-    try {
-      const response = await fetch(
-        `https://publish.twitter.com/oembed?url=${encodeURIComponent(
-          `https://twitter.com/${parsed.handle || 'i'}/status/${parsed.id}`
-        )}&omit_script=true&dnt=true`,
-        { signal: AbortSignal.timeout(OEMBED_TIMEOUT), redirect: 'error' }
-      );
-      if (!response.ok) {
-        return null;
-      }
-      const data = await response.json();
-      return {
-        author: data.author_name as string | undefined,
-        text: oembedHtmlToTweet(String(data.html || '')).text,
-      };
-    } catch (err) {
-      return null;
-    }
-  }
-
+  // X links are read through its free oEmbed endpoint, nothing is scraped.
+  // Other platforms have no free equivalent, so the user pastes the text.
   async addLink(orgId: string, body: SwipeLinkDto) {
+    const parsed = parseTweetUrl(body.url);
+    const sourceUrl = parsed?.url || body.url;
     const existing = await this._swipeRepository.getBySourceUrl(
       orgId,
-      body.url
+      sourceUrl
     );
     if (existing) {
       return existing;
     }
 
-    const parsed = parseTweetUrl(body.url);
-    const tweet = parsed ? await this.readTweet(parsed) : null;
+    const tweet = parsed
+      ? await this._xInspirationService.readTweet(parsed)
+      : null;
     const content = body.content?.trim() || tweet?.text;
     if (!content) {
       throw new BadRequestException(
@@ -215,11 +241,9 @@ export class SwipeService {
       orgId,
       {
         content,
-        author: tweet?.author,
-        sourceUrl: body.url,
-        platform: parsed
-          ? 'x'
-          : new URL(body.url).hostname.replace(/^www\./, '').split('.')[0],
+        author: tweet?.authorName || tweet?.authorHandle,
+        sourceUrl,
+        platform: parsed ? 'x' : platformOfUrl(body.url),
       },
       SwipeStatus.INBOX,
       SwipeOrigin.LINK

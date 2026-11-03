@@ -62,9 +62,14 @@ export class SwipeRepository {
     });
   }
 
-  getBySourceUrl(orgId: string, sourceUrl: string) {
+  // with deleted rows too: a post the user rejected stays rejected
+  getBySourceUrl(orgId: string, sourceUrl: string, withDeleted = false) {
     return this._entries.model.swipeEntry.findFirst({
-      where: { organizationId: orgId, sourceUrl, deletedAt: null },
+      where: {
+        organizationId: orgId,
+        sourceUrl,
+        ...(withDeleted ? {} : { deletedAt: null }),
+      },
     });
   }
 
@@ -127,6 +132,12 @@ export class SwipeRepository {
   async importEntries(orgId: string, entries: SwipeEntryDto[]) {
     for (const entry of entries) {
       if (!entry.notionBlockId) {
+        if (
+          entry.sourceUrl &&
+          (await this.getBySourceUrl(orgId, entry.sourceUrl, true))
+        ) {
+          continue;
+        }
         await this.createEntry(
           orgId,
           entry,
@@ -143,7 +154,7 @@ export class SwipeRepository {
             notionBlockId: entry.notionBlockId,
           },
         },
-        update: { ...this.values(entry), deletedAt: null },
+        update: this.values(entry),
         create: {
           ...this.values(entry),
           organizationId: orgId,
