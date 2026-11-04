@@ -10,6 +10,7 @@ import isoWeek from 'dayjs/plugin/isoWeek';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { GrowthToolsRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.repository';
 import { GrowthRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.repository';
+import { LeadLinksRepository } from '@gitroom/nestjs-libraries/database/prisma/lead-links/lead.links.repository';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { NotificationService } from '@gitroom/nestjs-libraries/database/prisma/notifications/notification.service';
@@ -58,6 +59,7 @@ export class GrowthToolsService {
   constructor(
     private _repository: GrowthToolsRepository,
     private _growthRepository: GrowthRepository,
+    private _leadLinksRepository: LeadLinksRepository,
     private _postsService: PostsService,
     private _integrationService: IntegrationService,
     private _notificationService: NotificationService,
@@ -216,16 +218,48 @@ export class GrowthToolsService {
       string,
       { leads: number; sales: number; value: number }
     >();
+    const byMessage = new Map<
+      string,
+      { leads: number; sales: number; value: number }
+    >();
     for (const p of conversions) {
       add(bySource, p.utmSource || 'unknown', p);
       if (p.postId) {
         add(byPost, p.postId, p);
+      }
+      if (p.messageTag) {
+        add(byMessage, p.messageTag, p);
       }
     }
 
     const posts = await this._repository.getPostsSummary(orgId, [
       ...byPost.keys(),
     ]);
+
+    // a tag is platform-code-position, like x-bt-08
+    const leadMessages = byMessage.size
+      ? await this._leadLinksRepository.getReportMessages(orgId)
+      : [];
+    const messages = [...byMessage.entries()].flatMap(([tag, row]) => {
+      const [, platform, code, position] =
+        tag.match(/^([a-z]+)-([a-z0-9]{2,8})-(\d{2})$/) || [];
+      const message = leadMessages.find(
+        (p) => p.magnet.code === code && p.position === Number(position)
+      );
+      return message
+        ? [
+            {
+              tag,
+              platform,
+              magnet: message.magnet.title,
+              position: message.position,
+              label: message.label,
+              tone: message.tone,
+              ...row,
+            },
+          ]
+        : [];
+    });
 
     return {
       days,
@@ -260,6 +294,7 @@ export class GrowthToolsService {
         }))
         .sort((a, b) => b.value - a.value || b.leads - a.leads)
         .slice(0, 25),
+      messages: messages.sort((a, b) => b.leads - a.leads || b.value - a.value),
     };
   }
 

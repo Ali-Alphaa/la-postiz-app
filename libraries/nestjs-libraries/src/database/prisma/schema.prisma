@@ -50,6 +50,7 @@ model Organization {
   swipeRuns           SwipeRun[]
   brandKit            BrandKit?
   conversions         Conversion[]
+  leadMagnets         LeadMagnet[]
   bioPage             BioPage?
   weeklyReviews       WeeklyReview[]
   inboxItems          InboxItem[]
@@ -2260,12 +2261,53 @@ model Conversion {
   utmContent     String?
   postId         String?
   externalId     String?
+  // the saved lead link message that brought it, like x-bt-08
+  messageTag     String?
   createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, externalId])
   @@index([organizationId, createdAt])
   @@index([postId])
+}
+
+// A lead magnet of the user's website and its saved messages
+model LeadMagnet {
+  id             String        @id @default(uuid())
+  organizationId String
+  title          String
+  url            String
+  coverUrl       String?
+  // the media library row of the cover, made the first time it is attached
+  coverMediaId   String?
+  description    String?
+  // short and unique per organization, part of the tag of its links, never changes
+  code           String
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages       LeadMessage[]
+
+  @@unique([organizationId, code])
+}
+
+// original is locked once written, versions holds the named copies of the user
+model LeadMessage {
+  id             String     @id @default(uuid())
+  magnetId       String
+  position       Int
+  label          String
+  tone           String
+  original       String     @default("")
+  aiDrafted      Boolean    @default(false)
+  versions       Json       @default("[]")
+  defaultVersion String     @default("original")
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  magnet         LeadMagnet @relation(fields: [magnetId], references: [id], onDelete: Cascade)
+
+  @@unique([magnetId, position])
 }
 
 model BioPage {

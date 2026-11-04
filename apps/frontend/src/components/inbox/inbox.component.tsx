@@ -11,6 +11,8 @@ import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { GrowthCard } from '@gitroom/frontend/components/growth/channel.select';
 import { useAiError } from '@gitroom/frontend/components/growth/x.inspiration';
 import { ComplianceNote } from '@gitroom/frontend/components/swipe/swipe.pack';
+import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import { LeadLinkPicker } from '@gitroom/frontend/components/lead-links/lead.links.component';
 
 const inputClass =
   'w-full bg-newBgColorInner border border-newTableBorder rounded-[8px] px-[12px] py-[8px] outline-none text-textColor';
@@ -230,9 +232,26 @@ const InboxCard: FC<{ item: InboxItem; reload: () => void }> = ({
   const fetch = useFetch();
   const toaster = useToaster();
   const aiError = useAiError();
+  const modals = useModals();
   const [text, setText] = useState('');
   const [drafting, setDrafting] = useState(false);
   const [sending, setSending] = useState(false);
+
+  const leadLink = useCallback(() => {
+    modals.openModal({
+      title: 'Lead Links',
+      withCloseButton: true,
+      children: (close) => (
+        <LeadLinkPicker
+          platform={item.integration.providerIdentifier.split('-')[0]}
+          onPick={(value) => {
+            setText((current) => (current ? `${current}\n\n${value}` : value));
+            close();
+          }}
+        />
+      ),
+    });
+  }, [item]);
 
   const draft = useCallback(async () => {
     setDrafting(true);
@@ -336,6 +355,9 @@ const InboxCard: FC<{ item: InboxItem; reload: () => void }> = ({
               disabled={drafting}
             >
               {t('inbox_draft', 'Draft with Claude')}
+            </Button>
+            <Button secondary={true} onClick={leadLink}>
+              {t('lead_links', 'Lead Links')}
             </Button>
             <button
               type="button"

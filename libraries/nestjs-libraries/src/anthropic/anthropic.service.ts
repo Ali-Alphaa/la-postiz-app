@@ -64,6 +64,15 @@ const SwipeRepurposePrompt = z.object({
   ),
 });
 
+const LeadMessagesPrompt = z.object({
+  messages: z.array(
+    z.object({
+      position: z.number().int(),
+      text: z.string().describe('At most 240 characters, without a link'),
+    })
+  ),
+});
+
 const SwipeExamplesPrompt = z.object({
   examples: z.array(
     z.object({
@@ -379,6 +388,54 @@ Rules:
     }
 
     return { status: 'error' };
+  }
+
+  // the ready to send messages of a lead magnet, one per conversation type
+  async generateLeadMessages(
+    magnet: { title: string; description?: string | null },
+    slots: ReadonlyArray<{ position: number; label: string; tone: string }>,
+    styleGuide?: string
+  ): Promise<AiResult<Array<{ position: number; text: string }>>> {
+    const result = await this.parse(
+      LeadMessagesPrompt,
+      `You write short messages a trading educator sends in social media conversations to offer a free resource. Their niche is ${NICHE}. The link is added after your text, so never write a link.
+${
+  styleGuide?.trim()
+    ? `Use the creator's vocabulary and attitude from their style guide, except where a formal tone below needs more care:
+<style_guide>
+${styleGuide.trim()}
+</style_guide>`
+    : ''
+}
+Tones:
+- formal: serious, courteous, complete sentences, no slang or jokes.
+- balanced: warm, plain and direct.
+- casual: relaxed and lighthearted, like a message to a friend. Never laugh at a person's real losses: joke about the situation.
+Rules:
+- Write exactly one message per conversation, with its position.
+- Each message is at most 240 characters, one to three sentences, written to be sent to one person.
+- Say the resource is free and that it needs an email address.
+- Only describe what the resource details say it contains.
+- British spelling. No emoji. No hashtags. No risk statement.
+- Never promise or imply profit, income, a win rate or a result.
+- Vary the openings, so the messages do not read like one template.`,
+      `<resource>
+<title>${magnet.title}</title>
+<details>${magnet.description || ''}</details>
+</resource>
+<conversations>
+${slots
+  .map((p) => `- position ${p.position}, tone ${p.tone}: ${p.label}`)
+  .join('\n')}
+</conversations>`,
+      'medium'
+    );
+
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return { status: 'ok', data: result.data.messages };
   }
 
   // one rewrite of a swipe file post per SCAMPER technique

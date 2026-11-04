@@ -112,6 +112,36 @@ export const Revenue: FC = () => {
         </GrowthCard>
         <GrowthCard className="flex flex-col gap-[8px]">
           <div className="font-[600]">
+            {t('revenue_by_message', 'By message')}
+          </div>
+          {!data?.messages?.length && (
+            <div className="text-[13px] text-textItemBlur">
+              {t(
+                'revenue_no_messages',
+                'No leads from a Lead Links message yet.'
+              )}
+            </div>
+          )}
+          {(data?.messages || []).map((row) => (
+            <div
+              key={row.tag}
+              className="border-t border-newTableBorder pt-[8px] text-[13px] flex gap-[12px] justify-between"
+            >
+              <div className="min-w-0 break-words">
+                {row.magnet} #{row.position}: {row.label}
+                <div className="text-[12px] text-textItemBlur capitalize">
+                  {row.tone} · {row.platform}
+                </div>
+              </div>
+              <div className="whitespace-nowrap text-end">
+                {row.leads} {t('revenue_leads_lower', 'leads')} · {row.sales}{' '}
+                {t('revenue_sales_lower', 'sales')} · {row.value.toFixed(2)}
+              </div>
+            </div>
+          ))}
+        </GrowthCard>
+        <GrowthCard className="flex flex-col gap-[8px]">
+          <div className="font-[600]">
             {t('revenue_by_source', 'By source')}
           </div>
           {!data?.sources?.length && (
