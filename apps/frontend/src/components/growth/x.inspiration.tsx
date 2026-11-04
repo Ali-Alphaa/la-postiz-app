@@ -9,7 +9,10 @@ import { Input } from '@gitroom/react/form/input';
 import { Select } from '@gitroom/react/form/select';
 import { Textarea } from '@gitroom/react/form/textarea';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
-import { useModals } from '@gitroom/frontend/components/layout/new-modal';
+import {
+  useDecisionModal,
+  useModals,
+} from '@gitroom/frontend/components/layout/new-modal';
 import {
   fromUtc,
   newDayjs,
@@ -1252,11 +1255,13 @@ export const XVoice: FC = () => {
   const fetch = useFetch();
   const toaster = useToaster();
   const aiError = useAiError();
+  const decision = useDecisionModal();
   const { data: voices, mutate: mutateList } = useXVoices();
   const [handle, setHandle] = useState('');
   const { data, mutate } = useXVoiceDetail(handle);
   const [styleGuide, setStyleGuide] = useState('');
   const [busy, setBusy] = useState('');
+  const unsaved = !!data && styleGuide !== (data.styleGuide || '');
 
   // the first account by default
   useEffect(() => {
@@ -1267,7 +1272,7 @@ export const XVoice: FC = () => {
 
   useEffect(() => {
     setStyleGuide(data?.styleGuide || '');
-  }, [data]);
+  }, [handle, data?.styleGuide]);
 
   const failed = useCallback(async (response: Response) => {
     toaster.show(
@@ -1281,38 +1286,89 @@ export const XVoice: FC = () => {
 
   const save = useCallback(async () => {
     setBusy('save');
-    const response = await fetch(`/growth/x/voices/${handle}`, {
-      method: 'PUT',
-      body: JSON.stringify({ styleGuide }),
-    });
-    setBusy('');
-    if (!response.ok) {
-      return failed(response);
+    try {
+      const response = await fetch(`/growth/x/voices/${handle}`, {
+        method: 'PUT',
+        body: JSON.stringify({ styleGuide }),
+      });
+      if (!response.ok) {
+        return failed(response);
+      }
+      await mutate();
+      toaster.show(t('saved', 'Saved'), 'success');
+      mutateList();
+    } finally {
+      setBusy('');
     }
-    toaster.show(t('saved', 'Saved'), 'success');
-    mutate();
-    mutateList();
   }, [handle, styleGuide]);
 
+  const selectAccount = useCallback(
+    async (next: string) => {
+      // a save or a regeneration in progress belongs to the current account
+      if (next === handle || busy) {
+        return;
+      }
+      if (
+        unsaved &&
+        !(await decision.open({
+          title: t('unsaved_style_guide', 'Unsaved changes'),
+          description: t(
+            'switch_voice_discard',
+            'Your changes to the style guide of @{{handle}} are not saved. Switch account and lose them?',
+            { handle }
+          ),
+          approveLabel: t('switch_account', 'Switch account'),
+          cancelLabel: t('keep_editing', 'Keep editing'),
+        }))
+      ) {
+        return;
+      }
+      setHandle(next);
+    },
+    [handle, unsaved, busy]
+  );
+
   const regenerate = useCallback(async () => {
-    setBusy('generate');
-    const response = await fetch(`/growth/x/voices/${handle}/generate`, {
-      method: 'POST',
-    });
-    setBusy('');
-    if (!response.ok) {
-      return failed(response);
-    }
-    const result = await response.json();
-    const message = aiError(result);
-    if (message) {
-      toaster.show(message, 'warning');
+    if (
+      unsaved &&
+      !(await decision.open({
+        title: t('unsaved_style_guide', 'Unsaved changes'),
+        description: t(
+          'regenerate_voice_discard',
+          'Claude will replace the style guide of @{{handle}}, including your unsaved changes.',
+          { handle }
+        ),
+        approveLabel: t('regenerate_anyway', 'Regenerate anyway'),
+        cancelLabel: t('keep_editing', 'Keep editing'),
+      }))
+    ) {
       return;
     }
-    setStyleGuide(result.styleGuide);
-    mutate();
-    mutateList();
-  }, [handle]);
+    setBusy('generate');
+    try {
+      const response = await fetch(`/growth/x/voices/${handle}/generate`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        return failed(response);
+      }
+      const result = await response.json();
+      const message = aiError(result);
+      if (message) {
+        toaster.show(message, 'warning');
+        return;
+      }
+      setStyleGuide(result.styleGuide);
+      await mutate();
+      toaster.show(
+        t('style_guide_regenerated', 'Style guide regenerated and saved'),
+        'success'
+      );
+      mutateList();
+    } finally {
+      setBusy('');
+    }
+  }, [handle, unsaved]);
 
   return (
     <GrowthSection
@@ -1337,7 +1393,7 @@ export const XVoice: FC = () => {
               key={voice.handle}
               voice={voice}
               selected={voice.handle === handle}
-              onClick={() => setHandle(voice.handle)}
+              onClick={() => selectAccount(voice.handle)}
             />
           ))}
         </div>
@@ -1376,15 +1432,19 @@ export const XVoice: FC = () => {
             <Button
               onClick={save}
               loading={busy === 'save'}
-              disabled={styleGuide === (data?.styleGuide || '')}
+              disabled={!unsaved || !!busy}
             >
-              {t('save', 'Save')}
+              {!unsaved && !!styleGuide
+                ? t('saved', 'Saved')
+                : t('save', 'Save')}
             </Button>
             <Button
               secondary={true}
               onClick={regenerate}
               loading={busy === 'generate'}
-              disabled={!data?.aiAvailable || (data?.sampleCount || 0) < 5}
+              disabled={
+                !!busy || !data?.aiAvailable || (data?.sampleCount || 0) < 5
+              }
             >
               {t('regenerate', 'Regenerate with Claude')}
             </Button>
