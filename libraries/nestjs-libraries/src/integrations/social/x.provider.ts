@@ -27,7 +27,7 @@ import { Integration } from '@prisma/client';
 import { timer } from '@gitroom/helpers/utils/timer';
 import { PostPlug } from '@gitroom/helpers/decorators/post.plug';
 import dayjs from 'dayjs';
-import { uniqBy } from 'lodash';
+import { chunk, uniqBy } from 'lodash';
 import { stripHtmlValidation } from '@gitroom/helpers/utils/strip.html.validation';
 import { stripLinks as removeLinks } from '@gitroom/helpers/utils/strip.links';
 import { XDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/x.dto';
@@ -1631,54 +1631,51 @@ export class XProvider extends SocialAbstract implements SocialProvider {
         return [];
       }
 
-      const data = await client.v2.tweets(
-        tweets.map((p) => p.id),
-        {
-          'tweet.fields': ['public_metrics'],
-        }
-      );
+      // X takes up to 100 ids per lookup
+      const loaded = (
+        await Promise.all(
+          chunk(
+            tweets.map((p) => p.id),
+            100
+          ).map((ids) =>
+            client.v2.tweets(ids, {
+              'tweet.fields': ['public_metrics', 'created_at'],
+            })
+          )
+        )
+      ).flatMap((p) => p.data || []);
 
-      const metrics = data.data.reduce(
-        (all, current) => {
-          all.impression_count =
-            (all.impression_count || 0) +
-            +current.public_metrics.impression_count;
-          all.bookmark_count =
-            (all.bookmark_count || 0) + +current.public_metrics.bookmark_count;
-          all.like_count =
-            (all.like_count || 0) + +current.public_metrics.like_count;
-          all.quote_count =
-            (all.quote_count || 0) + +current.public_metrics.quote_count;
-          all.reply_count =
-            (all.reply_count || 0) + +current.public_metrics.reply_count;
-          all.retweet_count =
-            (all.retweet_count || 0) + +current.public_metrics.retweet_count;
+      // one point per day: the totals of the tweets posted that day
+      const days: string[] = [];
+      for (
+        let day = since.startOf('day');
+        !day.isAfter(until);
+        day = day.add(1, 'day')
+      ) {
+        days.push(day.format('YYYY-MM-DD'));
+      }
 
-          return all;
-        },
-        {
-          impression_count: 0,
-          bookmark_count: 0,
-          like_count: 0,
-          quote_count: 0,
-          reply_count: 0,
-          retweet_count: 0,
-        }
-      );
+      const metrics = [
+        'impression_count',
+        'bookmark_count',
+        'like_count',
+        'quote_count',
+        'reply_count',
+        'retweet_count',
+      ] as const;
 
-      return Object.entries(metrics).map(([key, value]) => ({
+      return metrics.map((key) => ({
         label: key.replace('_count', '').replace('_', ' ').toUpperCase(),
-        percentageChange: 5,
-        data: [
-          {
-            total: String(0),
-            date: since.format('YYYY-MM-DD'),
-          },
-          {
-            total: String(value),
-            date: until.format('YYYY-MM-DD'),
-          },
-        ],
+        // no earlier period is loaded, so there is no change to report
+        percentageChange: 0,
+        data: days.map((date) => ({
+          total: String(
+            loaded
+              .filter((p) => dayjs(p.created_at).format('YYYY-MM-DD') === date)
+              .reduce((all, p) => all + (p.public_metrics?.[key] || 0), 0)
+          ),
+          date,
+        })),
       }));
     } catch (err) {
       console.log(err);
