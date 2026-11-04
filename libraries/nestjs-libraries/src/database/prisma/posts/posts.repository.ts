@@ -273,6 +273,21 @@ export class PostsRepository {
     const orderDirection: 'asc' | 'desc' =
       stateFilter === 'published' ? 'desc' : 'asc';
 
+    const integration = {
+      deletedAt: null as any,
+      organizationId: orgId,
+      ...(query.customer
+        ? {
+            customerId: query.customer,
+          }
+        : {}),
+      ...(query.integrations
+        ? {
+            id: { in: query.integrations },
+          }
+        : {}),
+    };
+
     const where = {
       AND: [
         {
@@ -293,62 +308,94 @@ export class PostsRepository {
       parentPostId: null as string | null,
       intervalInDays: null as number | null,
 
+      integration,
+    };
+
+    const select = {
+      id: true,
+      content: true,
+      publishDate: true,
+      releaseURL: true,
+      releaseId: true,
+      state: true,
+      intervalInDays: true,
+      group: true,
+      creationMethod: true,
+      tags: {
+        where: {
+          tag: {
+            deletedAt: null as Date | null,
+          },
+        },
+        select: {
+          tag: true,
+        },
+      },
       integration: {
-        deletedAt: null as any,
-        organizationId: orgId,
-        ...(query.customer
-          ? {
-              customerId: query.customer,
-            }
-          : {}),
-        ...(query.integrations
-          ? {
-              id: { in: query.integrations },
-            }
-          : {}),
+        select: {
+          id: true,
+          providerIdentifier: true,
+          name: true,
+          picture: true,
+        },
       },
     };
 
-    const [posts, total] = await Promise.all([
+    const [singlePosts, singleTotal, repeatingPosts] = await Promise.all([
       this._post.model.post.findMany({
         where,
-        skip,
-        take: limit,
+        take: skip + limit,
         orderBy: {
           publishDate: orderDirection,
         },
-        select: {
-          id: true,
-          content: true,
-          publishDate: true,
-          releaseURL: true,
-          releaseId: true,
-          state: true,
-          intervalInDays: true,
-          group: true,
-          creationMethod: true,
-          tags: {
-            where: {
-              tag: {
-                deletedAt: null,
-              },
-            },
-            select: {
-              tag: true,
-            },
-          },
-          integration: {
-            select: {
-              id: true,
-              providerIdentifier: true,
-              name: true,
-              picture: true,
-            },
-          },
-        },
+        select,
       }),
       this._post.model.post.count({ where }),
+      // A repeating post stays PUBLISHED between occurrences and keeps its first
+      // date, so the filters above never find it: it is listed once, at its next
+      // occurrence, the same dates the calendar computes
+      stateFilter === 'scheduled' || stateFilter === 'all'
+        ? this._post.model.post.findMany({
+            where: {
+              organizationId: orgId,
+              deletedAt: null,
+              parentPostId: null,
+              intervalInDays: { not: null },
+              state: { in: [State.QUEUE, State.PUBLISHED] },
+              integration,
+            },
+            select,
+          })
+        : [],
     ]);
+
+    const now = dayjs.utc();
+    const nextOccurrences = repeatingPosts.map((post) => {
+      const first = dayjs.utc(post.publishDate);
+      const interval = post.intervalInDays!;
+      const next = first.isBefore(now)
+        ? first.add(
+            Math.ceil(now.diff(first, 'day', true) / interval) * interval,
+            'day'
+          )
+        : first;
+
+      return {
+        ...post,
+        state: State.QUEUE,
+        publishDate: next.toDate(),
+        actualDate: post.publishDate,
+      };
+    });
+
+    const direction = orderDirection === 'asc' ? 1 : -1;
+    const posts = [...singlePosts, ...nextOccurrences]
+      .sort(
+        (a, b) =>
+          direction * (a.publishDate.getTime() - b.publishDate.getTime())
+      )
+      .slice(skip, skip + limit);
+    const total = singleTotal + nextOccurrences.length;
 
     return {
       posts,
