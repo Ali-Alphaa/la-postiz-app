@@ -2343,12 +2343,26 @@ model DmAutomation {
   dmText         String
   publicReply    String?
   enabled        Boolean      @default(true)
+  // only comments made after this trigger it: reset when it is turned on again
+  activatedAt    DateTime     @default(now())
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  sends          DmSend[]
 
   @@index([organizationId])
   @@index([integrationId, enabled])
+}
+
+// Exactly one DM per person per automation, whatever runs at the same time
+model DmSend {
+  id           String       @id @default(uuid())
+  automationId String
+  authorId     String
+  createdAt    DateTime     @default(now())
+  automation   DmAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@unique([automationId, authorId])
 }

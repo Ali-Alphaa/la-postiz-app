@@ -998,25 +998,36 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     posts: Array<{ postId: string; releaseId: string }>
   ): Promise<InboxRemoteItem[]> {
     const items: InboxRemoteItem[] = [];
+    // a post deleted on the platform must not stop the others
+    let failure: unknown;
+    let read = 0;
     for (const post of posts) {
-      const { data } = await (
-        await this.fetch(
-          `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,message,from,created_time&limit=50&access_token=${accessToken}`,
-          undefined,
-          'inbox comments'
-        )
-      ).json();
-      for (const comment of data || []) {
-        items.push({
-          kind: 'comment',
-          externalId: comment.id,
-          postId: post.postId,
-          authorId: comment.from?.id,
-          authorName: comment.from?.name,
-          text: comment.message || '',
-          receivedAt: new Date(comment.created_time),
-        });
+      try {
+        const { data } = await (
+          await this.fetch(
+            `https://graph.facebook.com/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,message,from,created_time&limit=50&access_token=${accessToken}`,
+            undefined,
+            'inbox comments'
+          )
+        ).json();
+        read++;
+        for (const comment of data || []) {
+          items.push({
+            kind: 'comment',
+            externalId: comment.id,
+            postId: post.postId,
+            authorId: comment.from?.id,
+            authorName: comment.from?.name,
+            text: comment.message || '',
+            receivedAt: new Date(comment.created_time),
+          });
+        }
+      } catch (err) {
+        failure = err;
       }
+    }
+    if (failure && !read) {
+      throw failure;
     }
     return items;
   }
@@ -1034,7 +1045,8 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
       },
-      'inbox reply'
+      'inbox reply',
+      3 // never repeated: a send that timed out may have been delivered
     );
   }
 

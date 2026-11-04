@@ -9,7 +9,11 @@ import { Integration } from '@prisma/client';
 import { InboxRepository } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.repository';
 import { IntegrationManager } from '@gitroom/nestjs-libraries/integrations/integration.manager';
 import { RefreshIntegrationService } from '@gitroom/nestjs-libraries/integrations/refresh.integration.service';
-import { RefreshToken } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import {
+  Disconnect,
+  RefreshToken,
+} from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { InboxRemoteItem } from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
 import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.service';
@@ -42,7 +46,8 @@ export class InboxService {
     private _integrationManager: IntegrationManager,
     private _refreshIntegrationService: RefreshIntegrationService,
     private _anthropicService: AnthropicService,
-    private _xVoiceService: XVoiceService
+    private _xVoiceService: XVoiceService,
+    private _integrationService: IntegrationService
   ) {}
 
   async getChannels(orgId: string) {
@@ -70,7 +75,9 @@ export class InboxService {
   // a token that is out of date is renewed and the call tried once more
   private async withToken<T>(
     integration: Integration,
-    call: (token: string) => Promise<T>
+    call: (token: string) => Promise<T>,
+    // a read of a post that is gone looks like a bad token, so reads don't refresh
+    refreshOnError = true
   ): Promise<T> {
     const refresh = async () => {
       const data = await this._refreshIntegrationService.refresh(integration);
@@ -78,6 +85,10 @@ export class InboxService {
         throw new BadRequestException('Reconnect this channel');
       }
       integration.token = data.accessToken;
+      integration.refreshToken = data.refreshToken;
+      integration.tokenExpiration = dayjs()
+        .add(data.expiresIn, 'seconds')
+        .toDate();
     };
 
     if (dayjs(integration.tokenExpiration).isBefore(dayjs())) {
@@ -86,7 +97,7 @@ export class InboxService {
     try {
       return await call(integration.token);
     } catch (err) {
-      if (err instanceof RefreshToken) {
+      if (err instanceof RefreshToken && refreshOnError) {
         await refresh();
         return call(integration.token);
       }
@@ -105,14 +116,23 @@ export class InboxService {
     const posts = (
       await this._inboxRepository.getRecentPosts(integration.id)
     ).map((p) => ({ postId: p.id, releaseId: p.releaseId! }));
-    const remote = await this.withToken(integration, (token) =>
-      provider.inboxItems!(integration.internalId, token, integration, posts)
+    const remote = await this.withToken(
+      integration,
+      (token) =>
+        provider.inboxItems!(integration.internalId, token, integration, posts),
+      false
     );
 
     // the channel's own comments and messages are not inbox items
     const fresh = await this._inboxRepository.keepNew(
       integration.id,
-      remote.filter((p) => p.authorId !== integration.internalId && p.text)
+      remote.filter(
+        (p) =>
+          p.externalId &&
+          p.text &&
+          !isNaN(new Date(p.receivedAt).getTime()) &&
+          p.authorId !== integration.internalId
+      )
     );
 
     let created = 0;
@@ -155,14 +175,17 @@ export class InboxService {
     const automation = automations.find(
       (p) =>
         (!p.postId || p.postId === item.postId) &&
-        // comments from before the automation existed never trigger it
-        dayjs(item.receivedAt).isAfter(p.createdAt) &&
+        // comments from before the automation was turned on never trigger it
+        dayjs(item.receivedAt).isAfter(p.activatedAt) &&
         matchesKeyword(item.text, p.keyword)
     );
     if (
       !automation ||
-      (await this._inboxRepository.hasSentTo(automation.id, item.authorId)) ||
-      !(await this._inboxRepository.claimDm(itemId, automation.id))
+      !(await this._inboxRepository.claimDm(
+        itemId,
+        automation.id,
+        item.authorId
+      ))
     ) {
       return;
     }
@@ -185,7 +208,12 @@ export class InboxService {
       );
     } catch (err) {
       this._logger.warn(`Comment DM failed: ${(err as Error).message}`);
-      await this._inboxRepository.failDm(itemId, (err as Error).message || '');
+      await this._inboxRepository.failDm(
+        itemId,
+        automation.id,
+        item.authorId,
+        (err as Error).message || ''
+      );
       return;
     }
 
@@ -222,6 +250,15 @@ export class InboxService {
         this._logger.warn(
           `Inbox sync failed for ${integration.id}: ${(err as Error).message}`
         );
+        if (err instanceof Disconnect) {
+          await this._integrationService
+            .disconnectChannel(
+              integration.organizationId,
+              integration,
+              err.message
+            )
+            .catch(() => undefined);
+        }
       }
     }
   }
@@ -327,6 +364,9 @@ export class InboxService {
   }
 
   async saveAutomation(orgId: string, body: DmAutomationDto, id?: string) {
+    if (body.keyword.trim().length < 2) {
+      throw new BadRequestException('The keyword is too short');
+    }
     const integration = await this._inboxRepository.getIntegration(
       orgId,
       body.integrationId

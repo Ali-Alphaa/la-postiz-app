@@ -7,12 +7,9 @@ import {
 import { InboxActivity } from '@gitroom/orchestrator/activities/inbox.activity';
 
 const { syncInbox } = proxyActivities<InboxActivity>({
-  startToCloseTimeout: '10 minute',
-  retry: {
-    maximumAttempts: 2,
-    backoffCoefficient: 1,
-    initialInterval: '1 minute',
-  },
+  startToCloseTimeout: '20 minute',
+  // the next run comes in 5 minutes anyway, and a retry could overlap this one
+  retry: { maximumAttempts: 1 },
 });
 
 // Reads new comments and messages, which also answers the comment keywords

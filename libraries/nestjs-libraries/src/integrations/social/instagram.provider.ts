@@ -27,6 +27,9 @@ import { Tool } from '@gitroom/nestjs-libraries/integrations/tool.decorator';
 import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
 
+// fetch retries below this: a send that timed out may have been delivered
+const NO_RETRY = 3;
+
 @Rules(
   "Instagram should have at least one attachment, if it's a story, it can have only one picture"
 )
@@ -1113,48 +1116,62 @@ export class InstagramProvider
     const [accessToken] = token.split('___');
     const items: InboxRemoteItem[] = [];
 
+    // a post deleted on the platform must not stop the others
+    let failure: unknown;
+    let read = 0;
     for (const post of posts) {
-      const { data } = await (
-        await this.fetch(
-          `https://${type}/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,text,username,timestamp,from&limit=50&access_token=${accessToken}`,
-          undefined,
-          'inbox comments'
-        )
-      ).json();
-      for (const comment of data || []) {
-        items.push({
-          kind: 'comment',
-          externalId: comment.id,
-          postId: post.postId,
-          authorId: comment.from?.id,
-          authorName: comment.username,
-          text: comment.text || '',
-          receivedAt: new Date(comment.timestamp),
-        });
-      }
-    }
-
-    if (process.env.INSTAGRAM_DM_ACCESS === 'true') {
-      const { data } = await (
-        await this.fetch(
-          `https://${type}/${META_GRAPH_API_VERSION}/${id}/conversations?platform=instagram&fields=id,messages.limit(5){id,from,message,created_time}&limit=25&access_token=${accessToken}`,
-          undefined,
-          'inbox conversations'
-        )
-      ).json();
-      for (const conversation of data || []) {
-        for (const message of conversation.messages?.data || []) {
+      try {
+        const { data } = await (
+          await this.fetch(
+            `https://${type}/${META_GRAPH_API_VERSION}/${post.releaseId}/comments?fields=id,text,username,timestamp,from&limit=50&access_token=${accessToken}`,
+            undefined,
+            'inbox comments'
+          )
+        ).json();
+        read++;
+        for (const comment of data || []) {
           items.push({
-            kind: 'dm',
-            externalId: message.id,
-            threadId: conversation.id,
-            authorId: message.from?.id,
-            authorName: message.from?.username,
-            text: message.message || '',
-            receivedAt: new Date(message.created_time),
+            kind: 'comment',
+            externalId: comment.id,
+            postId: post.postId,
+            authorId: comment.from?.id,
+            authorName: comment.username,
+            text: comment.text || '',
+            receivedAt: new Date(comment.timestamp),
           });
         }
+      } catch (err) {
+        failure = err;
       }
+    }
+    if (failure && !read) {
+      throw failure;
+    }
+
+    // messages are extra: failing to read them keeps the comments flowing
+    if (process.env.INSTAGRAM_DM_ACCESS === 'true') {
+      try {
+        const { data } = await (
+          await this.fetch(
+            `https://${type}/${META_GRAPH_API_VERSION}/${id}/conversations?platform=instagram&fields=id,messages.limit(5){id,from,message,created_time}&limit=25&access_token=${accessToken}`,
+            undefined,
+            'inbox conversations'
+          )
+        ).json();
+        for (const conversation of data || []) {
+          for (const message of conversation.messages?.data || []) {
+            items.push({
+              kind: 'dm',
+              externalId: message.id,
+              threadId: conversation.id,
+              authorId: message.from?.id,
+              authorName: message.from?.username,
+              text: message.message || '',
+              receivedAt: new Date(message.created_time),
+            });
+          }
+        }
+      } catch (err) {}
     }
 
     return items;
@@ -1175,7 +1192,8 @@ export class InstagramProvider
           text
         )}&access_token=${accessToken}`,
         { method: 'POST' },
-        'inbox reply'
+        'inbox reply',
+        NO_RETRY
       );
       return;
     }
@@ -1208,7 +1226,8 @@ export class InstagramProvider
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipient, message: { text } }),
       },
-      'inbox message'
+      'inbox message',
+      NO_RETRY
     );
   }
 

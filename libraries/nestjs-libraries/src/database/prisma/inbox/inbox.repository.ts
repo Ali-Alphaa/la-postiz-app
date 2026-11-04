@@ -13,6 +13,7 @@ export class InboxRepository {
   constructor(
     private _items: PrismaRepository<'inboxItem'>,
     private _automations: PrismaRepository<'dmAutomation'>,
+    private _sends: PrismaRepository<'dmSend'>,
     private _integrations: PrismaRepository<'integration'>,
     private _posts: PrismaRepository<'post'>
   ) {}
@@ -182,24 +183,34 @@ export class InboxRepository {
     });
   }
 
-  // one DM per person per automation: an earlier row of the same author wins
-  hasSentTo(automationId: string, authorId: string) {
-    return this._items.model.inboxItem.findFirst({
-      where: { automationId, authorId, dmSentAt: { not: null } },
+  // Taken before the DM goes out, the unique index lets only one caller win, so
+  // no two runs or two comments of one person can send it twice
+  async claimDm(id: string, automationId: string, authorId: string) {
+    const { count } = await this._sends.model.dmSend.createMany({
+      data: [{ automationId, authorId }],
+      skipDuplicates: true,
+    });
+    if (!count) {
+      return false;
+    }
+    await this._items.model.inboxItem.update({
+      where: { id },
+      data: { automationId, dmSentAt: new Date() },
       select: { id: true },
     });
+    return true;
   }
 
-  // claimed before the DM goes out, so a retry can't send it twice
-  async claimDm(id: string, automationId: string) {
-    const { count } = await this._items.model.inboxItem.updateMany({
-      where: { id, automationId: null },
-      data: { automationId, dmSentAt: new Date() },
+  // the claim goes too: a later comment of the same person can try again
+  async failDm(
+    id: string,
+    automationId: string,
+    authorId: string,
+    error: string
+  ) {
+    await this._sends.model.dmSend.deleteMany({
+      where: { automationId, authorId },
     });
-    return count === 1;
-  }
-
-  failDm(id: string, error: string) {
     return this._items.model.inboxItem.update({
       where: { id },
       data: { dmSentAt: null, dmError: error.slice(0, 300) },
@@ -238,7 +249,7 @@ export class InboxRepository {
     }));
   }
 
-  saveAutomation(orgId: string, body: DmAutomationDto, id?: string) {
+  async saveAutomation(orgId: string, body: DmAutomationDto, id?: string) {
     const data = {
       integrationId: body.integrationId,
       postId: body.postId || null,
@@ -247,10 +258,21 @@ export class InboxRepository {
       publicReply: body.publicReply || null,
       enabled: body.enabled,
     };
+    const previous = id
+      ? await this._automations.model.dmAutomation.findFirst({
+          where: { id, organizationId: orgId, deletedAt: null },
+          select: { enabled: true, integrationId: true },
+        })
+      : null;
+    // comments from while it was off, or on another channel, never trigger it
+    const restarted =
+      previous &&
+      ((body.enabled && !previous.enabled) ||
+        previous.integrationId !== body.integrationId);
     return id
       ? this._automations.model.dmAutomation.updateMany({
           where: { id, organizationId: orgId, deletedAt: null },
-          data,
+          data: { ...data, ...(restarted ? { activatedAt: new Date() } : {}) },
         })
       : this._automations.model.dmAutomation.create({
           data: { ...data, organizationId: orgId },
