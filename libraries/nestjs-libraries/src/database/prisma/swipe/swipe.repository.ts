@@ -77,7 +77,8 @@ export class SwipeRepository {
     orgId: string,
     entry: SwipeEntryDto,
     status: SwipeStatus,
-    origin: SwipeOrigin
+    origin: SwipeOrigin,
+    metrics?: Prisma.InputJsonValue
   ) {
     return this._entries.model.swipeEntry.create({
       data: {
@@ -85,6 +86,7 @@ export class SwipeRepository {
         organizationId: orgId,
         status,
         origin,
+        ...(metrics ? { metrics } : {}),
       },
     });
   }
@@ -109,6 +111,25 @@ export class SwipeRepository {
       where: { id, organizationId: orgId, deletedAt: null },
       data: { starred },
       select: { id: true },
+    });
+  }
+
+  setTags(orgId: string, id: string, formatTag: string, topicTags: string[]) {
+    return this._entries.model.swipeEntry.update({
+      where: { id, organizationId: orgId },
+      data: { formatTag, topicTags },
+      select: { id: true },
+    });
+  }
+
+  getOwnEntries(orgId: string) {
+    return this._entries.model.swipeEntry.findMany({
+      where: {
+        organizationId: orgId,
+        origin: SwipeOrigin.OWN,
+        deletedAt: null,
+      },
+      select: { formatTag: true, metrics: true },
     });
   }
 

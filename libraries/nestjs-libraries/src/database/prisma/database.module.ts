@@ -61,6 +61,10 @@ import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import { XNativeRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.repository';
 import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
+import { GrowthToolsRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.repository';
+import { GrowthToolsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.service';
+import { InboxRepository } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.repository';
+import { InboxService } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.service';
 import { SwipeRepository } from '@gitroom/nestjs-libraries/database/prisma/swipe/swipe.repository';
 import { SwipeService } from '@gitroom/nestjs-libraries/database/prisma/swipe/swipe.service';
 import { XVoiceRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.repository';
@@ -138,6 +142,10 @@ import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/
     XVoiceRepository,
     XVoiceService,
     SwipeRepository,
+    InboxRepository,
+    InboxService,
+    GrowthToolsRepository,
+    GrowthToolsService,
     SwipeService,
   ],
   get exports() {

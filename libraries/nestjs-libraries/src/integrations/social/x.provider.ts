@@ -1,3 +1,7 @@
+import {
+  InboxRemoteItem,
+  InboxReplyTarget,
+} from '@gitroom/nestjs-libraries/integrations/social/social.integrations.interface';
 import { TweetV2, TwitterApi } from 'twitter-api-v2';
 import { createHmac, randomBytes } from 'crypto';
 import { parseFragment } from 'parse5';
@@ -515,6 +519,55 @@ export class XProvider extends SocialAbstract implements SocialProvider {
         },
       ],
     };
+  }
+
+  // Reading replies is billed per request by X: only when the user asks
+  inboxManualSyncOnly = true;
+
+  async inboxItems(
+    id: string,
+    accessToken: string,
+    integration: Integration,
+    posts: Array<{ postId: string; releaseId: string }>
+  ): Promise<InboxRemoteItem[]> {
+    const client = await this.getClient(accessToken);
+    const items: InboxRemoteItem[] = [];
+    for (const post of posts.slice(0, 5)) {
+      const result = await client.v2.search(
+        `conversation_id:${post.releaseId} is:reply`,
+        {
+          max_results: 50,
+          'tweet.fields': ['created_at', 'author_id'],
+          expansions: ['author_id'],
+          'user.fields': ['username'],
+        }
+      );
+      for (const reply of result.tweets || []) {
+        items.push({
+          kind: 'comment',
+          externalId: reply.id,
+          postId: post.postId,
+          authorId: reply.author_id,
+          authorName: result.includes?.author(reply)?.username,
+          text: reply.text,
+          receivedAt: new Date(reply.created_at!),
+        });
+      }
+    }
+    return items;
+  }
+
+  async inboxReply(
+    id: string,
+    accessToken: string,
+    target: InboxReplyTarget,
+    text: string
+  ): Promise<void> {
+    const client = await this.getClient(accessToken);
+    await client.v2.tweet({
+      text,
+      reply: { in_reply_to_tweet_id: target.externalId },
+    });
   }
 
   private async getClient(accessToken: string) {

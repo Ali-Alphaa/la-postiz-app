@@ -1,5 +1,9 @@
 'use client';
 
+import { BulkSchedule } from '@gitroom/frontend/components/growth/bulk.schedule';
+import { Revenue } from '@gitroom/frontend/components/growth/revenue';
+import { WeeklyReviewPage } from '@gitroom/frontend/components/growth/weekly.review';
+import { BioEditor } from '@gitroom/frontend/components/growth/bio.editor';
 import { FC, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { useSearchParams } from 'next/navigation';
@@ -41,6 +45,10 @@ export const GrowthComponent: FC = () => {
       { tab: 'inspiration', label: t('inspiration', 'Inspiration') },
       { tab: 'x_inspiration', label: t('x_inspiration', 'X Inspiration') },
       { tab: 'x_voice', label: t('x_my_voice', 'X: My voice') },
+      { tab: 'bulk', label: t('bulk_scheduling', 'Bulk scheduling') },
+      { tab: 'revenue', label: t('revenue_tracking', 'Revenue tracking') },
+      { tab: 'weekly', label: t('weekly_review', 'Weekly review') },
+      { tab: 'bio', label: t('link_in_bio', 'Link in bio') },
     ],
     [t]
   );
@@ -86,6 +94,10 @@ export const GrowthComponent: FC = () => {
         {tab === 'inspiration' && <Inspiration />}
         {tab === 'x_inspiration' && <XInspiration />}
         {tab === 'x_voice' && <XVoice />}
+        {tab === 'bulk' && <BulkSchedule />}
+        {tab === 'revenue' && <Revenue />}
+        {tab === 'weekly' && <WeeklyReviewPage />}
+        {tab === 'bio' && <BioEditor />}
       </div>
     </>
   );

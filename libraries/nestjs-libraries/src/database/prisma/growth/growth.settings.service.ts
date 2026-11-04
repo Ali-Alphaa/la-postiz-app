@@ -35,7 +35,8 @@ export class GrowthSettingsService {
   async applyUtm(
     orgId: string,
     provider: string,
-    messages: string[]
+    messages: string[],
+    postId?: string
   ): Promise<string[]> {
     try {
       const settings = await this._growthRepository.getSettings(orgId);
@@ -43,7 +44,10 @@ export class GrowthSettingsService {
         return messages;
       }
 
-      const params = buildUtmParams(settings, provider);
+      const params = {
+        ...buildUtmParams(settings, provider),
+        ...(postId ? { utm_content: postId } : {}),
+      };
       const shortLinkDomain = ShortLinkService.provider.shortLinkDomain;
       const skip =
         shortLinkDomain && shortLinkDomain !== 'empty' ? [shortLinkDomain] : [];

@@ -121,6 +121,31 @@ export interface ISocialMediaIntegration {
     postDetails: PostDetails[],
     integration: Integration
   ): Promise<PostResponse[]>; // Schedules a new post
+
+  // Inbox: comments on the given posts, and direct messages when available
+  inboxItems?(
+    id: string,
+    accessToken: string,
+    integration: Integration,
+    posts: Array<{ postId: string; releaseId: string }>
+  ): Promise<InboxRemoteItem[]>;
+  inboxReply?(
+    id: string,
+    accessToken: string,
+    target: InboxReplyTarget,
+    text: string,
+    integration: Integration
+  ): Promise<void>;
+  // a direct message answering a comment
+  inboxPrivateReply?(
+    id: string,
+    accessToken: string,
+    commentId: string,
+    text: string,
+    integration: Integration
+  ): Promise<void>;
+  // reads cost money on this platform: only read when the user asks
+  inboxManualSyncOnly?: boolean;
 }
 
 export type PostResponse = {
@@ -268,4 +293,22 @@ export interface SocialProvider
   ): Promise<FetchPageInformationResult>;
   publicProfile?(handle: string): Promise<PublicProfile | undefined>; // Public profile of any account, without auth; undefined when not found
   publicPosts?(handle: string, limit: number): Promise<PublicPost[]>; // Latest public posts (no replies / reposts) of any account, without auth
+}
+
+export interface InboxRemoteItem {
+  kind: 'comment' | 'dm';
+  externalId: string;
+  threadId?: string;
+  postId?: string;
+  authorId?: string;
+  authorName?: string;
+  text: string;
+  receivedAt: Date;
+}
+
+export interface InboxReplyTarget {
+  kind: 'comment' | 'dm';
+  externalId: string;
+  threadId?: string;
+  authorId?: string;
 }

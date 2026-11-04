@@ -7,7 +7,7 @@ import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
 export interface SwipeEntry {
   id: string;
   status: 'LIBRARY' | 'INBOX';
-  origin: 'NOTION' | 'AI' | 'LINK' | 'MANUAL';
+  origin: 'NOTION' | 'AI' | 'LINK' | 'MANUAL' | 'OWN';
   platform: string;
   content: string;
   author?: string | null;

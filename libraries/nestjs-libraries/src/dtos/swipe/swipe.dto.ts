@@ -211,3 +211,26 @@ export class SwipeLinkDto {
   @MaxLength(20000)
   content?: string;
 }
+
+// a post of the swipe file or pasted text such as a video transcript
+export class SwipeSourceDto {
+  @IsOptional()
+  @IsString()
+  entryId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60000)
+  text?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  voiceHandle?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(3)
+  @Max(12)
+  slides?: number;
+}

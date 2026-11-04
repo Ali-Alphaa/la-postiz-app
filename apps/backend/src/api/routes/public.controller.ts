@@ -8,6 +8,7 @@ import {
   Req,
   Res,
   StreamableFile,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/posts.service';
@@ -26,6 +27,8 @@ import { promisify } from 'util';
 import { OnlyURL } from '@gitroom/nestjs-libraries/dtos/webhooks/webhooks.dto';
 import { isSafePublicHttpsUrl } from '@gitroom/nestjs-libraries/dtos/webhooks/webhook.url.validator';
 import { ssrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
+import { GrowthToolsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.tools.service';
+import { ThrottlerRealIpGuard } from '@gitroom/nestjs-libraries/throttler/throttler.provider';
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 
 const pump = promisify(pipeline);
@@ -37,8 +40,25 @@ export class PublicController {
     private _trackService: TrackService,
     private _agentGraphInsertService: AgentGraphInsertService,
     private _postsService: PostsService,
-    private _subscriptionService: SubscriptionService
+    private _subscriptionService: SubscriptionService,
+    private _growthToolsService: GrowthToolsService
   ) {}
+
+  @Get('/bio/:slug')
+  getBioPage(@Param('slug') slug: string) {
+    return this._growthToolsService.getPublicBioPage(slug);
+  }
+
+  @Get('/bio/:slug/go/:key')
+  @UseGuards(ThrottlerRealIpGuard)
+  async bioRedirect(
+    @Param('slug') slug: string,
+    @Param('key') key: string,
+    @Res() res: Response
+  ) {
+    res.redirect(302, await this._growthToolsService.bioRedirect(slug, key));
+  }
+
   @Post('/agent')
   async createAgent(@Body() body: { text: string; apiKey: string }) {
     if (
