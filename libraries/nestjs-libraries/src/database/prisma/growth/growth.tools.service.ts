@@ -180,10 +180,9 @@ export class GrowthToolsService {
 
   // utm_content holds the id of the post the visitor came from
   async recordConversion(orgId: string, body: ConversionDto) {
-    const post =
-      body.utmContent && /^[0-9a-f-]{36}$/i.test(body.utmContent)
-        ? await this._repository.postExists(orgId, body.utmContent)
-        : null;
+    const post = body.utmContent
+      ? await this._repository.postExists(orgId, body.utmContent)
+      : null;
     await this._repository.saveConversion(orgId, post?.id || null, body);
     return { recorded: true, attributed: !!post };
   }
