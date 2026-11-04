@@ -38,6 +38,16 @@ export interface Revenue {
   currencies: string[];
   totals: RevenueRow & { attributed: number };
   sources: Array<RevenueRow & { source: string }>;
+  messages: Array<
+    RevenueRow & {
+      tag: string;
+      platform: string;
+      magnet: string;
+      position: number;
+      label: string;
+      tone: string;
+    }
+  >;
   posts: Array<
     RevenueRow & {
       id: string;

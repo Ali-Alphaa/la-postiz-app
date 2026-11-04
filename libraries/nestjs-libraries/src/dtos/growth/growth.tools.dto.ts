@@ -100,6 +100,12 @@ export class ConversionDto {
   @MaxLength(100)
   utmContent?: string;
 
+  // the saved lead link message that brought it, like x-bt-08
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  messageTag?: string;
+
   // sent again it updates the same conversion. Never send a raw email here.
   @IsOptional()
   @IsString()

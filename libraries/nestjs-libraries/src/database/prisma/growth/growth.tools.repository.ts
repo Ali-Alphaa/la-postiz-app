@@ -55,6 +55,7 @@ export class GrowthToolsRepository {
       utmMedium: body.utmMedium,
       utmCampaign: body.utmCampaign,
       utmContent: body.utmContent,
+      messageTag: body.messageTag,
       postId,
     };
     if (!body.externalId) {
@@ -78,6 +79,7 @@ export class GrowthToolsRepository {
         ...(body.utmMedium ? { utmMedium: body.utmMedium } : {}),
         ...(body.utmCampaign ? { utmCampaign: body.utmCampaign } : {}),
         ...(body.utmContent ? { utmContent: body.utmContent } : {}),
+        ...(body.messageTag ? { messageTag: body.messageTag } : {}),
         ...(postId ? { postId } : {}),
       },
       create: { ...data, organizationId: orgId, externalId: body.externalId },

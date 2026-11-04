@@ -59,6 +59,7 @@ import { StripeController } from '@gitroom/backend/api/routes/stripe.controller'
 import { GrowthToolsController } from '@gitroom/backend/api/routes/growth.tools.controller';
 import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
 import { SwipeController } from '@gitroom/backend/api/routes/swipe.controller';
+import { LeadLinksController } from '@gitroom/backend/api/routes/lead.links.controller';
 import { GrowthController } from '@gitroom/backend/api/routes/growth.controller';
 
 const authenticatedController = [
@@ -84,6 +85,7 @@ const authenticatedController = [
   AdminController,
   GrowthController,
   SwipeController,
+  LeadLinksController,
   InboxController,
   GrowthToolsController,
 ];
