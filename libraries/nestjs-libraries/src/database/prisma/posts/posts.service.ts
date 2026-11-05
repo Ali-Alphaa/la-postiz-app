@@ -1204,7 +1204,8 @@ export class PostsService {
         creationMethod,
         body.inter,
         keepGroup,
-        batchId
+        batchId,
+        body.repeatTimes
       );
 
       if (!posts?.length) {

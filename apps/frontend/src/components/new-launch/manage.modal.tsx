@@ -28,7 +28,10 @@ import {
   DatePickerPanel,
 } from '@gitroom/frontend/components/launches/helpers/date.picker';
 import { useShallow } from 'zustand/react/shallow';
-import { RepeatComponent } from '@gitroom/frontend/components/launches/repeat.component';
+import {
+  RepeatComponent,
+  RepeatTimes,
+} from '@gitroom/frontend/components/launches/repeat.component';
 import { TagsComponent } from '@gitroom/frontend/components/launches/tags.component';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
@@ -100,6 +103,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     setDate,
     repeater,
     setRepeater,
+    repeatTimes,
+    setRepeatTimes,
     tags,
     setTags,
     integrations,
@@ -121,6 +126,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       current: state.current,
       repeater: state.repeater,
       setRepeater: state.setRepeater,
+      repeatTimes: state.repeatTimes,
+      setRepeatTimes: state.setRepeatTimes,
       tags: state.tags,
       setTags: state.setTags,
       selectedIntegrations: state.selectedIntegrations,
@@ -746,6 +753,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
         type,
         ...(republish ? { republish } : {}),
         ...(repeater ? { inter: repeater } : {}),
+        ...(repeater ? { repeatTimes: repeatTimes || null } : {}),
         tags,
         shortLink,
         date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
@@ -834,6 +842,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     [
       ref,
       repeater,
+      repeatTimes,
       tags,
       date,
       channelDates,
@@ -1150,6 +1159,10 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             {!dummy && (
               <RepeatComponent repeat={repeater} onChange={setRepeater} />
             )}
+
+            {!dummy && !!repeater && (
+              <RepeatTimes value={repeatTimes} onChange={setRepeatTimes} />
+            )}
           </div>
           <div className="pe-[20px] flex items-center justify-end gap-[8px]">
             {existingData?.integration && (
@@ -1377,6 +1390,11 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
             onChange={setRepeater}
             list={true}
           />
+          {!!repeater && (
+            <div className="px-[12px] pt-[8px]">
+              <RepeatTimes value={repeatTimes} onChange={setRepeatTimes} />
+            </div>
+          )}
         </BottomSheet>
       )}
       <CopilotPopup

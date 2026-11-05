@@ -195,7 +195,15 @@ export class PostActivity {
     // only the root drives the pre-publish sleep and the repeat schedule,
     // the rest are comments
     const [root, ...comments] = getPosts.map(slimPost);
-    return [reanchorInterval(root), ...comments];
+    const next = reanchorInterval(root);
+    // the workflow schedules the next send from the interval, so the last
+    // send of a limited repeat comes back without one
+    return [
+      root.repeatTimes && root.repeatSent + 1 >= root.repeatTimes
+        ? { ...next, intervalInDays: null }
+        : next,
+      ...comments,
+    ];
   }
 
   @ActivityMethod()

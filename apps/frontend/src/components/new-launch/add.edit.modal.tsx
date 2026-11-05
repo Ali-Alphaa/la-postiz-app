@@ -173,6 +173,7 @@ export const AddEditModalInnerInner: FC<AddEditModalProps> = (props) => {
     setTags,
     setEditor,
     setRepeater,
+    setRepeatTimes,
     selectedIntegrations,
     setChannelDate,
   } = useLaunchStore(
@@ -186,6 +187,7 @@ export const AddEditModalInnerInner: FC<AddEditModalProps> = (props) => {
       setTags: state.setTags,
       setEditor: state.setEditor,
       setRepeater: state.setRepeater,
+      setRepeatTimes: state.setRepeatTimes,
       selectedIntegrations: state.selectedIntegrations,
       setChannelDate: state.setChannelDate,
     }))
@@ -195,6 +197,7 @@ export const AddEditModalInnerInner: FC<AddEditModalProps> = (props) => {
     if (existingData.integration) {
       if (existingData?.posts?.[0]?.intervalInDays) {
         setRepeater(existingData.posts[0].intervalInDays);
+        setRepeatTimes(existingData.posts[0].repeatTimes || undefined);
       }
       setTags(
         // @ts-ignore
