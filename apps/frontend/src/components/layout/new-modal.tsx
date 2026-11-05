@@ -96,6 +96,15 @@ export const useModals = () => {
   } satisfies ModalManagerInterface;
 };
 
+// false while another modal is open over this one
+export const useIsTopModal = () => {
+  const { id } = useContext(CurrentModalContext);
+  return useModalStore((state) => {
+    const top = state.modalManager[state.modalManager.length - 1];
+    return !top || top.id === id;
+  });
+};
+
 export const Component: FC<{
   closeModal: (id: string) => void;
   zIndex: number;

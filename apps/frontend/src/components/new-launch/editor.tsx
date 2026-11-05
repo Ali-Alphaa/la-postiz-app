@@ -19,6 +19,8 @@ import { BoldText } from '@gitroom/frontend/components/new-launch/bold.text';
 import { UText } from '@gitroom/frontend/components/new-launch/u.text';
 import { SignatureBox } from '@gitroom/frontend/components/signature';
 import { LeadLinkBox } from '@gitroom/frontend/components/lead-links/lead.links.component';
+import { ScreenshotTools } from '@gitroom/frontend/components/new-launch/screenshot.tools';
+import { useIsTopModal } from '@gitroom/frontend/components/layout/new-modal';
 import { HashtagBox } from '@gitroom/frontend/components/new-launch/hashtag.box';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import {
@@ -790,6 +792,36 @@ export const Editor: FC<{
     [uppy, num, comments, toaster, t, inlineImages, filterFiles]
   );
 
+  // a picture pasted while the cursor isn't in any text, like right after using
+  // the snipping tool, goes to the post being edited
+  const isTopModal = useIsTopModal();
+  useEffect(() => {
+    if (!active || !isTopModal || (num > 0 && comments === 'no-media')) {
+      return;
+    }
+
+    const pasteAnywhere = (event: globalThis.ClipboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.defaultPrevented ||
+        target?.closest?.('input, textarea, [contenteditable="true"]')
+      ) {
+        return;
+      }
+
+      const images = Array.from(event.clipboardData?.files || []).filter(
+        (file) => file.type.startsWith('image/')
+      );
+      if (images.length) {
+        event.preventDefault();
+        onDrop(images);
+      }
+    };
+
+    window.addEventListener('paste', pasteAnywhere);
+    return () => window.removeEventListener('paste', pasteAnywhere);
+  }, [active, isTopModal, num, comments, onDrop]);
+
   // a drag that starts on the page (like moving a picture inside the editor)
   // is not an upload, but Chrome reports a dragged <img> as "Files"
   const [internalDrag, setInternalDrag] = useState(false);
@@ -1046,6 +1078,13 @@ export const Editor: FC<{
                               : appendImages
                           }
                         />
+                        {!(num > 0 && comments === 'no-media') && (
+                          <ScreenshotTools
+                            text={valueWithoutHtml}
+                            channels={props.selectedIntegration}
+                            onFiles={onDrop}
+                          />
+                        )}
                         <HashtagBox
                           editor={editorRef?.current?.editor}
                           text={valueWithoutHtml}
