@@ -138,7 +138,7 @@ const ScreenshotCrop: FC<{
         <img
           src={url}
           draggable={false}
-          className="block max-w-full max-h-[60vh]"
+          className="block max-w-full max-h-[calc(100vh-330px)]"
           alt=""
         />
         {!!crop && (
@@ -389,7 +389,7 @@ const PostImage: FC<{
       </div>
       <canvas
         ref={canvas}
-        className="self-center max-w-full max-h-[60vh] w-auto h-auto rounded-[8px] border border-newColColor"
+        className="self-center max-w-full max-h-[calc(100vh-330px)] w-auto h-auto rounded-[8px] border border-newColColor"
       />
       <div className="flex justify-end">
         <Button
