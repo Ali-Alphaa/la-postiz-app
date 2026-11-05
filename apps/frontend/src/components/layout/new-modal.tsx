@@ -96,6 +96,11 @@ export const useModals = () => {
   } satisfies ModalManagerInterface;
 };
 
+const TopModalContext = createContext(true);
+
+// false while another modal is open over this one
+export const useIsTopModal = () => useContext(TopModalContext);
+
 export const Component: FC<{
   closeModal: (id: string) => void;
   zIndex: number;
@@ -296,13 +301,17 @@ export const ModalManagerInner: FC = () => {
     <>
       <style>{`body, html { overflow: hidden !important; }`}</style>
       {modalManager.map((modal, index) => (
-        <Component
-          isLast={modalManager.length - 1 === index}
+        <TopModalContext.Provider
           key={modal.id}
-          modal={modal}
-          zIndex={200 + index}
-          closeModal={closeModal}
-        />
+          value={modalManager.length - 1 === index}
+        >
+          <Component
+            isLast={modalManager.length - 1 === index}
+            modal={modal}
+            zIndex={200 + index}
+            closeModal={closeModal}
+          />
+        </TopModalContext.Provider>
       ))}
     </>
   );
