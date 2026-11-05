@@ -49,6 +49,36 @@ const getList = (t: (key: string, fallback: string) => string) => [
     label: t('cancel', 'Cancel'),
   },
 ];
+// how many times the post goes out in total, empty keeps repeating
+export const RepeatTimes: FC<{
+  value?: number;
+  onChange: (value?: number) => void;
+}> = ({ value, onChange }) => {
+  const t = useT();
+  const [text, setText] = useState<string | null>(null);
+
+  return (
+    <label className="border border-newTextColor/10 rounded-[8px] h-[44px] px-[12px] flex items-center gap-[8px] text-[15px] font-[600] select-none whitespace-nowrap">
+      {t('repeat_total', 'Post')}
+      <input
+        value={text ?? value ?? ''}
+        placeholder="∞"
+        inputMode="numeric"
+        maxLength={3}
+        aria-label={t('repeat_total_times', 'Times to post in total')}
+        onChange={(e) => setText(e.target.value.replace(/\D/g, ''))}
+        onBlur={() => {
+          const num = parseInt(text ?? String(value ?? ''), 10);
+          onChange(isNaN(num) ? undefined : Math.min(365, Math.max(2, num)));
+          setText(null);
+        }}
+        className="w-[48px] bg-transparent border-b border-newTextColor/20 focus:border-[#612BD3] text-center outline-none"
+      />
+      {t('repeat_times_total', 'times in total')}
+    </label>
+  );
+};
+
 export const RepeatComponent: FC<{
   repeat: number | null;
   onChange: (newVal: number) => void;

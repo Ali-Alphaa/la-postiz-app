@@ -35,6 +35,7 @@ interface StoreState {
   postComment: PostComment;
   dummy: boolean;
   repeater?: number;
+  repeatTimes?: number;
   isCreateSet: boolean;
   totalChars: number;
   activateExitButton: boolean;
@@ -117,6 +118,7 @@ interface StoreState {
   setDate: (date: dayjs.Dayjs) => void;
   setChannelDate: (integrationId: string, date: dayjs.Dayjs) => void;
   setRepeater: (repeater: number) => void;
+  setRepeatTimes: (repeatTimes?: number) => void;
   setTags: (tags: { label: string; value: string }[]) => void;
   setIsCreateSet: (isCreateSet: boolean) => void;
   setTotalChars?: (totalChars: number) => void;
@@ -151,6 +153,8 @@ const initialState = {
   channelDates: {} as Record<string, dayjs.Dayjs>,
   postComment: PostComment.ALL,
   tags: [] as { label: string; value: string }[],
+  repeater: undefined as number | undefined,
+  repeatTimes: undefined as number | undefined,
   totalChars: 0,
   tab: 0 as 0,
   isCreateSet: false,
@@ -551,6 +555,10 @@ export const useLaunchStore = create<StoreState>()((set) => ({
   setRepeater: (repeater: number) =>
     set((state) => ({
       repeater,
+    })),
+  setRepeatTimes: (repeatTimes?: number) =>
+    set((state) => ({
+      repeatTimes,
     })),
   setTags: (tags: { label: string; value: string }[]) =>
     set((state) => ({

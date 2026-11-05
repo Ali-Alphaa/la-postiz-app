@@ -200,6 +200,7 @@ export class PostsRepository {
         state: true,
         error: true,
         intervalInDays: true,
+        repeatTimes: true,
         group: true,
         creationMethod: true,
         settings: true,
@@ -233,7 +234,16 @@ export class PostsRepository {
 
       const addMorePosts = [];
       let startingDate = dayjs.utc(post.publishDate);
-      while (dayjs.utc(endDate).isSameOrAfter(startingDate)) {
+      const last = post.repeatTimes
+        ? startingDate.add(
+            (post.repeatTimes - 1) * post.intervalInDays,
+            'days'
+          )
+        : null;
+      while (
+        dayjs.utc(endDate).isSameOrAfter(startingDate) &&
+        (!last || last.isSameOrAfter(startingDate))
+      ) {
         if (dayjs(startingDate).isSameOrAfter(dayjs.utc(post.publishDate))) {
           addMorePosts.push({
             ...post,
@@ -319,6 +329,8 @@ export class PostsRepository {
       releaseId: true,
       state: true,
       intervalInDays: true,
+      repeatTimes: true,
+      repeatSent: true,
       group: true,
       creationMethod: true,
       tags: {
@@ -370,7 +382,7 @@ export class PostsRepository {
     ]);
 
     const now = dayjs.utc();
-    const nextOccurrences = repeatingPosts.map((post) => {
+    const nextOccurrences = repeatingPosts.flatMap((post) => {
       const first = dayjs.utc(post.publishDate);
       const interval = post.intervalInDays!;
       const next = first.isBefore(now)
@@ -380,12 +392,17 @@ export class PostsRepository {
           )
         : first;
 
-      return {
-        ...post,
-        state: State.QUEUE,
-        publishDate: next.toDate(),
-        actualDate: post.publishDate,
-      };
+      // a limited repeat that already went out every time has nothing upcoming
+      return post.repeatTimes && post.repeatSent >= post.repeatTimes
+        ? []
+        : [
+            {
+              ...post,
+              state: State.QUEUE,
+              publishDate: next.toDate(),
+              actualDate: post.publishDate,
+            },
+          ];
     });
 
     const direction = orderDirection === 'asc' ? 1 : -1;
@@ -505,7 +522,17 @@ export class PostsRepository {
     });
   }
 
-  updatePost(id: string, postId: string, releaseURL: string) {
+  async updatePost(id: string, postId: string, releaseURL: string) {
+    // counts a limited repeat's send once, even if this step is retried
+    await this._post.model.post.updateMany({
+      where: {
+        id,
+        repeatTimes: { not: null },
+        OR: [{ releaseId: null }, { releaseId: { not: postId } }],
+      },
+      data: { repeatSent: { increment: 1 } },
+    });
+
     return this._post.model.post.update({
       where: {
         id,
@@ -664,7 +691,9 @@ export class PostsRepository {
     keepGroup = false,
     // Shared by the posts saved together for several channels, so opening one
     // of them in the editor brings the others.
-    batchId?: string
+    batchId?: string,
+    // empty keeps repeating, not sent at all keeps what the post has
+    repeatTimes?: number | null
   ) {
     const posts: Post[] = [];
     const uuid = uuidv4();
@@ -724,6 +753,13 @@ export class PostsRepository {
         group,
         batchId: existingBatchId || batchId,
         intervalInDays: inter ? +inter : null,
+        ...(!inter
+          ? { repeatTimes: null }
+          : repeatTimes !== undefined
+          ? { repeatTimes: repeatTimes ? +repeatTimes : null }
+          : {}),
+        // scheduling it again starts a new series
+        ...(state === 'update' ? {} : { repeatSent: 0 }),
         approvedSubmitForOrder: APPROVED_SUBMIT_FOR_ORDER.NO,
         ...(type === 'create' ? { creationMethod } : {}),
         ...(state === 'update'

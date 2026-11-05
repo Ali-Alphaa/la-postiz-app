@@ -1,7 +1,7 @@
-import { FC, useCallback, useState } from 'react';
+import { FC, useCallback, useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import clsx from 'clsx';
-import { Calendar, TimeInput } from '@mantine/dates';
+import { Calendar } from '@mantine/dates';
 import { useClickOutside } from '@mantine/hooks';
 import { Button } from '@gitroom/react/form/button';
 import { isUSCitizen } from './isuscitizen.utils';
@@ -17,7 +17,10 @@ import {
   DropdownArrowIcon,
 } from '@gitroom/frontend/components/ui/icons';
 
-// one part of the time in the mobile sheet, typed or stepped with the arrows
+// how far a wheel or trackpad has to move for one step of the time
+const WHEEL_STEP = 50;
+
+// one part of the time: typed, stepped with the arrows or scrolled over
 const TimeField: FC<{
   value: number;
   min: number;
@@ -29,12 +32,36 @@ const TimeField: FC<{
   const format = (num: number) =>
     pad ? String(num).padStart(2, '0') : String(num);
   const step = (delta: number) => () => {
+    setText(null);
     const range = max - min + 1;
     onChange(((value - min + delta + range) % range) + min);
   };
 
+  const ref = useRef<HTMLDivElement>(null);
+  const stepRef = useRef(step);
+  stepRef.current = step;
+
+  // a native listener: react's wheel handler can't stop the page scrolling
+  useEffect(() => {
+    let moved = 0;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      moved += e.deltaY;
+      if (Math.abs(moved) >= WHEEL_STEP) {
+        stepRef.current(moved < 0 ? 1 : -1)();
+        moved = 0;
+      }
+    };
+    const element = ref.current;
+    element?.addEventListener('wheel', wheel, { passive: false });
+    return () => element?.removeEventListener('wheel', wheel);
+  }, []);
+
   return (
-    <div className="w-[74px] min-w-[56px] flex flex-col items-center gap-[4px] text-textItemBlur">
+    <div
+      ref={ref}
+      className="w-[74px] min-w-[56px] flex flex-col items-center gap-[4px] text-textItemBlur"
+    >
       <div onClick={step(1)} className="cursor-pointer">
         <DropdownArrowIcon rotated={true} />
       </div>
@@ -61,6 +88,67 @@ const TimeField: FC<{
   );
 };
 
+// the hours, the minutes and on a 12 hour clock am or pm
+const TimeFields: FC<{
+  date: dayjs.Dayjs;
+  changeTime: (hour: number, minute: number) => void;
+}> = ({ date, changeTime }) => {
+  const twelveHours = isUSCitizen();
+  const pm = date.hour() >= 12;
+  return (
+    <div className="flex items-center gap-[12px] min-w-0">
+      <div className="flex rtl:flex-row-reverse items-center gap-[4px] min-w-0">
+        {twelveHours ? (
+          <TimeField
+            value={date.hour() % 12 || 12}
+            min={1}
+            max={12}
+            onChange={(hour) =>
+              changeTime((hour % 12) + (pm ? 12 : 0), date.minute())
+            }
+          />
+        ) : (
+          <TimeField
+            value={date.hour()}
+            min={0}
+            max={23}
+            pad={true}
+            onChange={(hour) => changeTime(hour, date.minute())}
+          />
+        )}
+        <div className="text-[14px] font-[600]">:</div>
+        <TimeField
+          value={date.minute()}
+          min={0}
+          max={59}
+          pad={true}
+          onChange={(minute) => changeTime(date.hour(), minute)}
+        />
+      </div>
+      {twelveHours && (
+        <div className="h-[52px] flex gap-[3px] p-[4px] rounded-[8px] border border-newColColor bg-newBgColorInner">
+          {[false, true].map((isPm) => (
+            <div
+              key={String(isPm)}
+              onClick={() =>
+                changeTime((date.hour() % 12) + (isPm ? 12 : 0), date.minute())
+              }
+              className={clsx(
+                'w-[44px] h-[44px] flex justify-center items-center rounded-[6px] text-[14px] cursor-pointer select-none',
+                isPm === pm
+                  ? 'bg-boxFocused text-textItemFocused'
+                  : 'text-textItemBlur'
+              )}
+            >
+              {isPm ? 'pm' : 'am'}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // the calendar and the time, in the desktop popover or in the mobile sheet
 export const DatePickerPanel: FC<{
   date: dayjs.Dayjs;
@@ -74,12 +162,10 @@ export const DatePickerPanel: FC<{
   // the pickers give machine-local dates, so their wall clock is read with
   // plain dayjs and then placed in the user's timezone
   const changeDate = useCallback(
-    (type: 'date' | 'time') => (day: Date) => {
+    (day: Date) => {
       onChange(
         newDayjs(
-          type === 'time'
-            ? date.format('YYYY-MM-DD') + ' ' + dayjs(day).format('HH:mm:ss')
-            : dayjs(day).format('YYYY-MM-DD') + ' ' + date.format('HH:mm:ss')
+          dayjs(day).format('YYYY-MM-DD') + ' ' + date.format('HH:mm:ss')
         )
       );
     },
@@ -100,8 +186,6 @@ export const DatePickerPanel: FC<{
   );
 
   if (sheet) {
-    const twelveHours = isUSCitizen();
-    const pm = date.hour() >= 12;
     return (
       <div className="flex flex-col">
         <div className="flex items-center gap-[16px] mb-[12px]">
@@ -147,7 +231,7 @@ export const DatePickerPanel: FC<{
             onMonthChange={setMonth}
             onChange={(day) => {
               setMonth(day);
-              changeDate('date')(day);
+              changeDate(day);
             }}
             value={toPickerDate(date)}
             dayClassName={(day, modifiers) =>
@@ -175,59 +259,7 @@ export const DatePickerPanel: FC<{
           <div className="w-[55px] text-[15px] font-[600]">
             {t('time', 'Time')}
           </div>
-          <div className="flex items-center gap-[12px] min-w-0">
-            <div className="flex rtl:flex-row-reverse items-center gap-[4px] min-w-0">
-              {twelveHours ? (
-                <TimeField
-                  value={date.hour() % 12 || 12}
-                  min={1}
-                  max={12}
-                  onChange={(hour) =>
-                    changeTime((hour % 12) + (pm ? 12 : 0), date.minute())
-                  }
-                />
-              ) : (
-                <TimeField
-                  value={date.hour()}
-                  min={0}
-                  max={23}
-                  pad={true}
-                  onChange={(hour) => changeTime(hour, date.minute())}
-                />
-              )}
-              <div className="text-[14px] font-[600]">:</div>
-              <TimeField
-                value={date.minute()}
-                min={0}
-                max={59}
-                pad={true}
-                onChange={(minute) => changeTime(date.hour(), minute)}
-              />
-            </div>
-            {twelveHours && (
-              <div className="h-[52px] flex gap-[3px] p-[4px] rounded-[8px] border border-newColColor bg-newBgColorInner">
-                {[false, true].map((isPm) => (
-                  <div
-                    key={String(isPm)}
-                    onClick={() =>
-                      changeTime(
-                        (date.hour() % 12) + (isPm ? 12 : 0),
-                        date.minute()
-                      )
-                    }
-                    className={clsx(
-                      'w-[44px] h-[44px] flex justify-center items-center rounded-[6px] text-[14px] cursor-pointer select-none',
-                      isPm === pm
-                        ? 'bg-boxFocused text-textItemFocused'
-                        : 'text-textItemBlur'
-                    )}
-                  >
-                    {isPm ? 'pm' : 'am'}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <TimeFields date={date} changeTime={changeTime} />
         </div>
       </div>
     );
@@ -236,7 +268,7 @@ export const DatePickerPanel: FC<{
   return (
     <>
       <Calendar
-        onChange={changeDate('date')}
+        onChange={changeDate}
         value={toPickerDate(date)}
         dayClassName={(date, modifiers) => {
           if (modifiers.weekend) {
@@ -256,17 +288,10 @@ export const DatePickerPanel: FC<{
           calendarHeaderLevel: 'text-textColor hover:bg-third', // cell: 'child:!text-textColor'
         }}
       />
-      <TimeInput
-        onChange={changeDate('time')}
-        format={isUSCitizen() ? '12' : '24'}
-        label="Pick time"
-        classNames={{
-          label: 'text-textColor py-[12px]',
-          input:
-            'bg-sixth h-[40px] border border-tableBorder text-textColor rounded-[4px] outline-none',
-        }}
-        defaultValue={toPickerDate(date)}
-      />
+      <div className="text-textColor py-[12px]">
+        {t('pick_time_scroll', 'Pick time, or scroll over the clock')}
+      </div>
+      <TimeFields date={date} changeTime={changeTime} />
     </>
   );
 };

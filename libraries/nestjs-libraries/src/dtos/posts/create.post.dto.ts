@@ -5,9 +5,12 @@ import {
   IsDateString,
   IsDefined,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
+  Min,
   Validate,
   ValidateIf,
   ValidateNested,
@@ -111,6 +114,13 @@ export class CreatePostDto {
   @IsOptional()
   @IsNumber()
   inter?: number;
+
+  // how many times a repeating post goes out in total, null keeps repeating
+  @IsOptional()
+  @IsInt()
+  @Min(2)
+  @Max(365)
+  repeatTimes?: number | null;
 
   // explicit opt-in to publish an already-PUBLISHED post again; without it a
   // schedule/now save targeting a published post is rejected
