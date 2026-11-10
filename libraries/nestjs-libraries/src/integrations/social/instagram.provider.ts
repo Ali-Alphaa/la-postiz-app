@@ -484,6 +484,12 @@ export class InstagramProvider
 
   async generateAuthUrl() {
     const state = makeSecureId(6);
+    // Newer Meta apps only allow Facebook Login for Business, which takes a
+    // configuration id instead of a scope list. Without it, keep the classic scope flow.
+    const permissions = process.env.FACEBOOK_CONFIG_ID
+      ? `&config_id=${process.env.FACEBOOK_CONFIG_ID}` +
+        `&response_type=code&override_default_response_type=true`
+      : `&scope=${encodeURIComponent(this.scopes.join(','))}`;
     return {
       url:
         `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth` +
@@ -492,7 +498,7 @@ export class InstagramProvider
           `${process.env.FRONTEND_URL}/integrations/social/instagram`
         )}` +
         `&state=${state}` +
-        `&scope=${encodeURIComponent(this.scopes.join(','))}`,
+        permissions,
       codeVerifier: makeSecureId(10),
       state,
     };
