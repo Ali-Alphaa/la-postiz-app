@@ -305,6 +305,12 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
 
   async generateAuthUrl() {
     const state = makeSecureId(6);
+    // Newer Meta apps only allow Facebook Login for Business, which takes a
+    // configuration id instead of a scope list. Without it, keep the classic scope flow.
+    const permissions = process.env.FACEBOOK_PAGE_CONFIG_ID
+      ? `&config_id=${process.env.FACEBOOK_PAGE_CONFIG_ID}` +
+        `&response_type=code&override_default_response_type=true`
+      : `&scope=${this.scopes.join(',')}`;
     return {
       url:
         `https://www.facebook.com/${META_GRAPH_API_VERSION}/dialog/oauth` +
@@ -313,7 +319,7 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
           `${process.env.FRONTEND_URL}/integrations/social/facebook`
         )}` +
         `&state=${state}` +
-        `&scope=${this.scopes.join(',')}`,
+        permissions,
       codeVerifier: makeSecureId(10),
       state,
     };
