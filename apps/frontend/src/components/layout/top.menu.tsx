@@ -145,6 +145,27 @@ export const useMenuItem = () => {
       path: '/lead-links',
     },
     {
+      name: t('music', 'Music'),
+      icon: (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="21"
+          viewBox="0 0 24 24"
+          fill="none"
+        >
+          <path
+            d="M9 18V5l12-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm12-2a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      ),
+      path: '/music',
+    },
+    {
       name: t('inbox', 'Inbox'),
       icon: (
         <svg
