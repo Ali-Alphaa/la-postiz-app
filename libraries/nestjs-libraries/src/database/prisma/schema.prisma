@@ -509,6 +509,9 @@ model Post {
   // how many times a repeating post goes out in total, empty keeps repeating
   repeatTimes                Int?
   repeatSent                 Int                       @default(0)
+  // the sends of a same-day repeat (every N minutes or hours) are separate posts
+  // sharing this id
+  seriesId                   String?
   error                      String?
   createdAt                  DateTime                  @default(now())
   updatedAt                  DateTime                  @updatedAt
@@ -538,6 +541,7 @@ model Post {
   @@index([parentPostId])
   @@index([submittedForOrderId])
   @@index([intervalInDays])
+  @@index([seriesId])
   @@index([approvedSubmitForOrder])
   @@index([creationMethod])
   @@index([lastMessageId])

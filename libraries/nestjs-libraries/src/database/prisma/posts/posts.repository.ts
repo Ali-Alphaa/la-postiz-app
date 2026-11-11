@@ -201,6 +201,7 @@ export class PostsRepository {
         error: true,
         intervalInDays: true,
         repeatTimes: true,
+        seriesId: true,
         group: true,
         creationMethod: true,
         settings: true,
@@ -619,6 +620,54 @@ export class PostsRepository {
     return update;
   }
 
+  // the sends of a same-day repeat that did not go out yet
+  async cancelSeriesRemaining(orgId: string, seriesId: string) {
+    const result = await this._post.model.post.updateMany({
+      where: {
+        organizationId: orgId,
+        seriesId,
+        deletedAt: null,
+        state: { in: ['QUEUE', 'DRAFT'] },
+        publishDate: { gt: new Date() },
+      },
+      data: { deletedAt: new Date() },
+    });
+    return { cancelled: result.count };
+  }
+
+  // a send that failed right after another failed one stops the rest of its
+  // series, so a broken token does not fail every remaining send
+  async pauseSeriesAfterFailure(post: Post) {
+    if (!post.seriesId || post.deletedAt) {
+      return 0;
+    }
+
+    const previous = await this._post.model.post.findFirst({
+      where: {
+        seriesId: post.seriesId,
+        deletedAt: null,
+        parentPostId: null,
+        publishDate: { lt: post.publishDate },
+      },
+      orderBy: { publishDate: 'desc' },
+      select: { state: true },
+    });
+    if (previous?.state !== 'ERROR') {
+      return 0;
+    }
+
+    const result = await this._post.model.post.updateMany({
+      where: {
+        seriesId: post.seriesId,
+        deletedAt: null,
+        state: 'QUEUE',
+        publishDate: { gt: post.publishDate },
+      },
+      data: { deletedAt: new Date() },
+    });
+    return result.count;
+  }
+
   getErrorsByPostIds(postIds: string[]) {
     return this._errors.model.errors.findMany({
       where: {
@@ -693,7 +742,9 @@ export class PostsRepository {
     // of them in the editor brings the others.
     batchId?: string,
     // empty keeps repeating, not sent at all keeps what the post has
-    repeatTimes?: number | null
+    repeatTimes?: number | null,
+    // shared by the sends of a same-day repeat
+    seriesId?: string
   ) {
     const posts: Post[] = [];
     const uuid = uuidv4();
@@ -760,6 +811,7 @@ export class PostsRepository {
           : {}),
         // scheduling it again starts a new series
         ...(state === 'update' ? {} : { repeatSent: 0 }),
+        ...(seriesId ? { seriesId } : {}),
         approvedSubmitForOrder: APPROVED_SUBMIT_FOR_ORDER.NO,
         ...(type === 'create' ? { creationMethod } : {}),
         ...(state === 'update'

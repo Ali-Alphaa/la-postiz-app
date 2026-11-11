@@ -267,6 +267,30 @@ const usePostActions = (onMutate?: () => void) => {
 
   const deletePost = useCallback(
     (post: any) => async () => {
+      // one send of a repeat during the day: the rest can be cancelled together
+      if (
+        post.seriesId &&
+        post.state === 'QUEUE' &&
+        (await deleteDialog(
+          t(
+            'series_cancel_remaining_question',
+            'This is one send of a repeat during the day. Cancel all the sends that have not gone out yet?'
+          ),
+          t('series_cancel_remaining', 'Cancel all remaining'),
+          undefined,
+          t('series_just_this_one', 'Just this one'),
+          true
+        ))
+      ) {
+        await fetch(`/posts/series/${post.seriesId}`, { method: 'DELETE' });
+        toaster.show(
+          t('series_cancelled', 'The remaining sends were cancelled'),
+          'success'
+        );
+        mutate();
+        return;
+      }
+
       if (
         !(await deleteDialog(
           t(
@@ -814,12 +838,33 @@ export const CalendarColumn: FC<{
   const showLessFunc = useCallback(() => {
     setShowAll(false);
   }, []);
+  // the sends of a repeat during the day are one chip in the month view
+  const seriesCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const post of postList as any[]) {
+      if (post.seriesId) {
+        counts.set(post.seriesId, (counts.get(post.seriesId) || 0) + 1);
+      }
+    }
+    return counts;
+  }, [postList]);
+  const shownPosts = useMemo(
+    () =>
+      display === 'month'
+        ? postList.filter(
+            (post: any, i) =>
+              !post.seriesId ||
+              postList.findIndex((p: any) => p.seriesId === post.seriesId) === i
+          )
+        : postList,
+    [postList, display]
+  );
   const list = useMemo(() => {
     if (showAll) {
-      return postList;
+      return shownPosts;
     }
-    return postList.slice(0, 3);
-  }, [postList, showAll]);
+    return shownPosts.slice(0, 3);
+  }, [shownPosts, showAll]);
 
   // currentHour comes from one shared clock, so passed hours get blocked
   // while the calendar stays open
@@ -1073,6 +1118,11 @@ export const CalendarColumn: FC<{
                   display={display as 'day' | 'week' | 'month'}
                   isBeforeNow={isBeforeNow}
                   date={getDate}
+                  seriesCount={
+                    display === 'month' && (post as any).seriesId
+                      ? seriesCounts.get((post as any).seriesId)
+                      : undefined
+                  }
                   state={post.state}
                   statistics={openStatistics(post.id)}
                   missingRelease={openMissingRelease(post.id)}
@@ -1087,22 +1137,22 @@ export const CalendarColumn: FC<{
               </div>
             </div>
           ))}
-          {!showAll && postList.length > 3 && (
+          {!showAll && shownPosts.length > 3 && (
             <div
               className="text-center hover:underline py-[5px] text-textColor"
               onClick={showAllFunc}
             >
               <span className={clsx(display === 'month' && 'mobile:hidden')}>
-                {t('show_more', '+ Show more')} ({postList.length - 3})
+                {t('show_more', '+ Show more')} ({shownPosts.length - 3})
               </span>
               {display === 'month' && (
                 <span className="hidden mobile:inline">
-                  +{postList.length - 3}
+                  +{shownPosts.length - 3}
                 </span>
               )}
             </div>
           )}
-          {showAll && postList.length > 3 && (
+          {showAll && shownPosts.length > 3 && (
             <div
               className="text-center hover:underline py-[5px]"
               onClick={showLessFunc}
@@ -1206,6 +1256,8 @@ const CalendarItem: FC<{
   integrations: Integrations[];
   state: State;
   display: 'day' | 'week' | 'month';
+  // sends of the same repeat during the day this chip stands for
+  seriesCount?: number;
   showTime?: boolean;
   post: Post & {
     integration: Integration;
@@ -1227,6 +1279,7 @@ const CalendarItem: FC<{
     display,
     deletePost,
     showTime,
+    seriesCount,
     missingRelease,
     openPost,
   } = props;
@@ -1288,6 +1341,15 @@ const CalendarItem: FC<{
           )}
         >
           ✓
+        </div>
+      )}
+      {!!seriesCount && seriesCount > 1 && (
+        <div
+          className="absolute -top-[6px] -end-[6px] z-20 px-[6px] h-[18px] rounded-full bg-[#612BD3] flex items-center justify-center text-white text-[11px] font-bold"
+          data-tooltip-id="tooltip"
+          data-tooltip-content={`${seriesCount} sends today`}
+        >
+          ×{seriesCount}
         </div>
       )}
       {showCreationMethodBadge && (
