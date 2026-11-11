@@ -17,11 +17,16 @@ export const UPLOAD_ALLOWED_MIME = new Set<string>([
   'video/mp4',
 ]);
 
+// the music library only takes mp3, which every browser can decode
+export const MUSIC_ALLOWED_MIME = new Set<string>(['audio/mpeg']);
+
 export function getMaxSize(mimeType: string): number {
   if (mimeType.startsWith('image/')) {
     return 10 * 1024 * 1024; // 10 MB
   } else if (mimeType.startsWith('video/')) {
     return 1024 * 1024 * 1024; // 1 GB
+  } else if (mimeType.startsWith('audio/')) {
+    return 30 * 1024 * 1024; // 30 MB
   } else {
     throw new BadRequestException('Unsupported file type.');
   }
@@ -51,7 +56,8 @@ export function maxSizeStream(maxSize: number) {
 export async function uploadStreamToStorage(
   storage: IUploadProvider,
   webStream: ReadableStream,
-  declaredSize = 0
+  declaredSize = 0,
+  allowed = UPLOAD_ALLOWED_MIME
 ) {
   let sniffed: ReadableStream & { fileType?: { mime: string; ext: string } };
   try {
@@ -60,7 +66,7 @@ export async function uploadStreamToStorage(
     throw new BadRequestException('Failed to read file', { cause: err });
   }
   const detected = sniffed.fileType;
-  if (!detected || !UPLOAD_ALLOWED_MIME.has(detected.mime)) {
+  if (!detected || !allowed.has(detected.mime)) {
     await sniffed.cancel();
     throw new BadRequestException('Unsupported file type.');
   }

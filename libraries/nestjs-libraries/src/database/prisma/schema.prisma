@@ -51,6 +51,7 @@ model Organization {
   brandKit            BrandKit?
   conversions         Conversion[]
   leadMagnets         LeadMagnet[]
+  musicTracks         MusicTrack[]
   bioPage             BioPage?
   weeklyReviews       WeeklyReview[]
   inboxItems          InboxItem[]
@@ -2276,6 +2277,24 @@ model Conversion {
   @@unique([organizationId, externalId])
   @@index([organizationId, createdAt])
   @@index([postId])
+}
+
+// tracks for putting music under videos, the files are in storage
+model MusicTrack {
+  id             String       @id @default(uuid())
+  organizationId String
+  title          String
+  artist         String?
+  licence        String?
+  path           String
+  // seconds, read by the browser when it was uploaded
+  duration       Float?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
 }
 
 // A lead magnet of the user's website and its saved messages
