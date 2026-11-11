@@ -20,6 +20,7 @@ import { UText } from '@gitroom/frontend/components/new-launch/u.text';
 import { SignatureBox } from '@gitroom/frontend/components/signature';
 import { LeadLinkBox } from '@gitroom/frontend/components/lead-links/lead.links.component';
 import { ScreenshotTools } from '@gitroom/frontend/components/new-launch/screenshot.tools';
+import { MusicBox } from '@gitroom/frontend/components/music/music.component';
 import { useIsTopModal } from '@gitroom/frontend/components/layout/new-modal';
 import { HashtagBox } from '@gitroom/frontend/components/new-launch/hashtag.box';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
@@ -663,12 +664,36 @@ export const Editor: FC<{
   // the uploader is created once, so it reads the latest value from here
   const inlineImagesRef = useRef(inlineImages);
   inlineImagesRef.current = inlineImages;
+  const picturesRef = useRef(pictures);
+  picturesRef.current = pictures;
+  const setImagesRef = useRef(setImages);
+  setImagesRef.current = setImages;
+  // an upload that takes the place of an attachment once it has arrived
+  const replacing = useRef<{ name: string; id: string } | null>(null);
 
   const uppy = useUppyUploader({
     onUploadSuccess: (result: any) => {
       const editor = editorRef?.current?.editor;
       if (inlineImagesRef.current && editor) {
         insertImages(editor, result);
+        return;
+      }
+
+      const pending = replacing.current;
+      const current = picturesRef.current || [];
+      const index = current.findIndex((p) => p.id === pending?.id);
+      const replacement = result.find(
+        (p: any) => p?.originalName === pending?.name
+      );
+      if (pending && replacement && index > -1 && setImagesRef.current) {
+        replacing.current = null;
+        setImagesRef.current(
+          current.map((p, i) => (i === index ? replacement : p))
+        );
+        const others = result.filter((p: any) => p !== replacement);
+        if (others.length) {
+          appendImages(others);
+        }
         return;
       }
 
@@ -1085,6 +1110,18 @@ export const Editor: FC<{
                             onFiles={onDrop}
                           />
                         )}
+                        {!inlineImages &&
+                          !(num > 0 && comments === 'no-media') && (
+                            <MusicBox
+                              pictures={pictures || []}
+                              onFile={(file, replaceId) => {
+                                replacing.current = replaceId
+                                  ? { name: file.name, id: replaceId }
+                                  : null;
+                                onDrop([file]);
+                              }}
+                            />
+                          )}
                         <HashtagBox
                           editor={editorRef?.current?.editor}
                           text={valueWithoutHtml}

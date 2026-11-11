@@ -3,14 +3,21 @@ import { StorageEngine } from 'multer';
 import { Readable } from 'stream';
 import { IUploadProvider } from './upload.interface';
 import { UploadFactory } from './upload.factory';
-import { getMaxSize, uploadStreamToStorage } from './custom.upload.validation';
+import {
+  getMaxSize,
+  UPLOAD_ALLOWED_MIME,
+  uploadStreamToStorage,
+} from './custom.upload.validation';
 
 // Multer storage engine that streams each incoming file straight into
 // storage instead of multer's default of buffering it whole in memory.
 // `file.filename` / `file.path` end up as the stored key and public URL,
 // `file.originalname` keeps the sender's name with the detected extension
 export class MulterStreamEngine implements StorageEngine {
-  constructor(private storage: IUploadProvider) {}
+  constructor(
+    private storage: IUploadProvider,
+    private allowed = UPLOAD_ALLOWED_MIME
+  ) {}
 
   _handleFile(
     req: Request,
@@ -19,7 +26,9 @@ export class MulterStreamEngine implements StorageEngine {
   ) {
     uploadStreamToStorage(
       this.storage,
-      Readable.toWeb(file.stream) as any
+      Readable.toWeb(file.stream) as any,
+      0,
+      this.allowed
     ).then(
       (uploaded) => {
         const safeBase =
@@ -52,16 +61,21 @@ export class MulterStreamEngine implements StorageEngine {
   }
 }
 
-let engine: MulterStreamEngine;
+const engines = new Map<Set<string>, MulterStreamEngine>();
 
 // Options for FileInterceptor on the multipart upload routes. Multer's own
 // limit sits one byte above the largest allowed type so the in-stream cap is
 // what rejects (a uniform 400 that aborts the upload) rather than multer
 // truncating the file, storing it whole and only then failing with a 413
-export function streamUploadOptions() {
-  engine = engine || new MulterStreamEngine(UploadFactory.createStorage());
+export function streamUploadOptions(allowed = UPLOAD_ALLOWED_MIME) {
+  if (!engines.has(allowed)) {
+    engines.set(
+      allowed,
+      new MulterStreamEngine(UploadFactory.createStorage(), allowed)
+    );
+  }
   return {
-    storage: engine,
+    storage: engines.get(allowed)!,
     limits: { fileSize: getMaxSize('video/mp4') + 1 },
   };
 }
