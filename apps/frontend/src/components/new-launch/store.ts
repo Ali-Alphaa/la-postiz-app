@@ -6,6 +6,7 @@ import { Integrations } from '@gitroom/frontend/components/launches/calendar.con
 import { createRef, RefObject } from 'react';
 import { PostComment } from '@gitroom/frontend/components/new-launch/providers/post-comment.enum';
 import { newDayjs } from '@gitroom/frontend/components/layout/set.timezone';
+import { SeriesPayload } from '@gitroom/frontend/components/launches/series.component';
 
 interface Values {
   id: string;
@@ -36,6 +37,8 @@ interface StoreState {
   dummy: boolean;
   repeater?: number;
   repeatTimes?: number;
+  // sends of a same-day repeat, every one approved
+  series?: SeriesPayload;
   isCreateSet: boolean;
   totalChars: number;
   activateExitButton: boolean;
@@ -119,6 +122,7 @@ interface StoreState {
   setChannelDate: (integrationId: string, date: dayjs.Dayjs) => void;
   setRepeater: (repeater: number) => void;
   setRepeatTimes: (repeatTimes?: number) => void;
+  setSeries: (series?: SeriesPayload) => void;
   setTags: (tags: { label: string; value: string }[]) => void;
   setIsCreateSet: (isCreateSet: boolean) => void;
   setTotalChars?: (totalChars: number) => void;
@@ -155,6 +159,7 @@ const initialState = {
   tags: [] as { label: string; value: string }[],
   repeater: undefined as number | undefined,
   repeatTimes: undefined as number | undefined,
+  series: undefined as SeriesPayload | undefined,
   totalChars: 0,
   tab: 0 as 0,
   isCreateSet: false,
@@ -559,6 +564,10 @@ export const useLaunchStore = create<StoreState>()((set) => ({
   setRepeatTimes: (repeatTimes?: number) =>
     set((state) => ({
       repeatTimes,
+    })),
+  setSeries: (series?: SeriesPayload) =>
+    set((state) => ({
+      series,
     })),
   setTags: (tags: { label: string; value: string }[]) =>
     set((state) => ({

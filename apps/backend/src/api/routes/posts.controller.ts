@@ -34,6 +34,7 @@ import {
   ResolveCommentDto,
 } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 import { RealIP } from 'nestjs-real-ip';
+import { SeriesVariationsDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 
 @ApiTags('Posts')
 @Controller('/posts')
@@ -283,6 +284,22 @@ export class PostsController {
     }
 
     res.end();
+  }
+
+  @Post('/series/variations')
+  seriesVariations(
+    @GetOrgFromRequest() org: Organization,
+    @Body() body: SeriesVariationsDto
+  ) {
+    return this._postsService.seriesVariations(org.id, body);
+  }
+
+  @Delete('/series/:seriesId')
+  cancelSeriesRemaining(
+    @GetOrgFromRequest() org: Organization,
+    @Param('seriesId') seriesId: string
+  ) {
+    return this._postsService.cancelSeriesRemaining(org.id, seriesId);
   }
 
   @Delete('/:group')
