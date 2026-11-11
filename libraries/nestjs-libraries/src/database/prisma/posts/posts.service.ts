@@ -59,6 +59,9 @@ import { postContentPlainText } from '@gitroom/helpers/utils/sanitize.post.conte
 import { CreatePublicCommentDto } from '@gitroom/nestjs-libraries/dtos/comments/add.comment.dto';
 import { countLength } from '@gitroom/helpers/utils/count.length';
 import { GrowthSettingsService } from '@gitroom/nestjs-libraries/database/prisma/growth/growth.settings.service';
+import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.voice.service';
+import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
+import { SeriesVariationsDto } from '@gitroom/nestjs-libraries/dtos/posts/create.post.dto';
 
 type PostWithConditionals = Post & {
   integration?: Integration;
@@ -77,7 +80,9 @@ export class PostsService {
     private _openaiService: OpenaiService,
     private _temporalService: TemporalService,
     private _refreshIntegrationService: RefreshIntegrationService,
-    private _growthSettingsService: GrowthSettingsService
+    private _growthSettingsService: GrowthSettingsService,
+    private _xVoiceService: XVoiceService,
+    private _anthropicService: AnthropicService
   ) {}
 
   searchForMissingThreeHoursPosts() {
@@ -1151,8 +1156,14 @@ export class PostsService {
     orgId: string,
     body: CreatePostDto,
     creationMethod: CreationMethod,
-    keepGroup = false
+    keepGroup = false,
+    // set for the sends of a same-day repeat
+    seriesId?: string
   ): Promise<any[]> {
+    if (body.series) {
+      return this.createSeries(orgId, body, creationMethod, keepGroup);
+    }
+
     const postList = [];
     const batchId = uuidv4();
     for (const post of body.posts) {
@@ -1205,7 +1216,8 @@ export class PostsService {
         body.inter,
         keepGroup,
         batchId,
-        body.repeatTimes
+        body.repeatTimes,
+        seriesId
       );
 
       if (!posts?.length) {
@@ -1234,6 +1246,129 @@ export class PostsService {
     }
 
     return postList;
+  }
+
+  // A post that goes out every N minutes or hours during one day. Every send is
+  // its own scheduled post with the text that was approved for it, all of a
+  // channel sharing one series id, so a failed send does not touch the others
+  // and the rest of the series can be cancelled together.
+  private async createSeries(
+    orgId: string,
+    body: CreatePostDto,
+    creationMethod: CreationMethod,
+    keepGroup: boolean
+  ): Promise<any[]> {
+    const { slots, intervalMinutes } = body.series!;
+    if (body.type !== 'schedule' && body.type !== 'draft') {
+      throw new BadRequestException(
+        'A repeat during the day can only be scheduled or saved as a draft'
+      );
+    }
+
+    const times = slots
+      .map((slot) => dayjs.utc(slot.date))
+      .sort((a, b) => a.valueOf() - b.valueOf());
+    if (times.some((time, i) => i && time.diff(times[i - 1], 'minute') < 15)) {
+      throw new BadRequestException('Sends must be at least 15 minutes apart');
+    }
+    if (times[times.length - 1].diff(times[0], 'hour', true) > 24) {
+      throw new BadRequestException('A repeat during the day lasts 24 hours at most');
+    }
+    if (!slots.every((slot) => slot.content?.trim())) {
+      throw new BadRequestException('Every send needs some text');
+    }
+    if (
+      body.type === 'schedule' &&
+      times.some((time) => time.isBefore(dayjs.utc().subtract(1, 'minute')))
+    ) {
+      throw new BadRequestException('A send is already in the past');
+    }
+
+    const withText = (post: CreatePostDto['posts'][number], content: string) => ({
+      ...post,
+      value: post.value.map((value, i) => ({
+        ...value,
+        id: undefined,
+        ...(i === 0 ? { content } : {}),
+      })),
+    });
+
+    // each approved text has to fit its channel, the same checks as one post
+    if (body.type !== 'draft') {
+      for (const slot of slots) {
+        const checks = await this.validatePosts(
+          orgId,
+          body.posts.map((post) => withText(post, slot.content))
+        );
+        const bad = checks.find((c) => c.tooLong || c.errors !== true);
+        if (bad) {
+          throw new BadRequestException(
+            `${bad.name}: ${
+              bad.tooLong ? 'a version is too long' : (bad.errors as string)
+            }`
+          );
+        }
+      }
+    }
+
+    const postList = [];
+    for (const post of body.posts) {
+      const seriesId = uuidv4();
+      for (const slot of slots) {
+        const created = await this.createPost(
+          orgId,
+          {
+            ...body,
+            series: undefined,
+            inter: undefined,
+            repeatTimes: undefined,
+            date: slot.date,
+            posts: [{ ...withText(post, slot.content), date: slot.date }],
+          },
+          creationMethod,
+          keepGroup,
+          seriesId
+        );
+        postList.push(...created.map((c) => ({ ...c, seriesId })));
+      }
+    }
+
+    return postList;
+  }
+
+  // Cancels the sends of a same-day repeat that did not go out yet
+  async cancelSeriesRemaining(orgId: string, seriesId: string) {
+    return this._postRepository.cancelSeriesRemaining(orgId, seriesId);
+  }
+
+  // One rewrite per send, in the voice of the channel. The user approves them
+  // in the editor before anything is scheduled.
+  async seriesVariations(orgId: string, body: SeriesVariationsDto) {
+    if (!this._anthropicService.isAvailable()) {
+      throw new BadRequestException('Claude is not set up on this server');
+    }
+    if (!body.text.trim()) {
+      throw new BadRequestException('Write the post first');
+    }
+
+    const voice = await this._xVoiceService.resolve(orgId, {
+      integrationId: body.integrationId,
+    });
+    const result = await this._anthropicService.generateSeriesVariations(
+      body.text,
+      body.count,
+      body.maxLength || 280,
+      voice?.styleGuide || undefined
+    );
+    if (result.status !== 'ok' || result.data.length < body.count) {
+      throw new BadRequestException(
+        result.status === 'rate_limited'
+          ? 'Claude is busy, try again in a minute'
+          : 'Claude could not write the versions, try again'
+      );
+    }
+
+    return { variations: result.data.slice(0, body.count) };
   }
 
   // Update ONLY the provider settings of a not-yet-published post (scheduled or
@@ -1388,7 +1523,20 @@ export class PostsService {
   }
 
   async changeState(id: string, state: State, err?: any, body?: any) {
-    return this._postRepository.changeState(id, state, err, body);
+    const post = await this._postRepository.changeState(id, state, err, body);
+    if (state === 'ERROR' && post.seriesId) {
+      const cancelled = await this._postRepository
+        .pauseSeriesAfterFailure(post)
+        .catch(() => 0);
+      if (cancelled && typeof post.error === 'string') {
+        await this._postRepository.changeState(
+          id,
+          state,
+          `${post.error} (Repeat stopped after 2 failures in a row, ${cancelled} later sends cancelled)`
+        );
+      }
+    }
+    return post;
   }
 
   async changePostStatus(

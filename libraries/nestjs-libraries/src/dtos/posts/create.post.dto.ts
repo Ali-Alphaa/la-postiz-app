@@ -1,4 +1,5 @@
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -98,6 +99,53 @@ class Tags {
   label: string;
 }
 
+// one send of a same-day repeat, with the text that was approved for it
+class SeriesSlot {
+  @IsDefined()
+  @IsDateString()
+  date: string;
+
+  @IsDefined()
+  @IsString()
+  content: string;
+}
+
+// a post that goes out every N minutes or hours during one day: every slot
+// becomes its own scheduled post
+class Series {
+  @IsInt()
+  @Min(15)
+  @Max(1440)
+  intervalMinutes: number;
+
+  @IsArray()
+  @ArrayMinSize(2)
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => SeriesSlot)
+  slots: SeriesSlot[];
+}
+
+export class SeriesVariationsDto {
+  @IsString()
+  text: string;
+
+  @IsInt()
+  @Min(2)
+  @Max(50)
+  count: number;
+
+  @IsOptional()
+  @IsString()
+  integrationId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(50)
+  @Max(5000)
+  maxLength?: number;
+}
+
 export class CreatePostDto {
   @IsDefined()
   @IsIn(['draft', 'schedule', 'now', 'update'])
@@ -121,6 +169,11 @@ export class CreatePostDto {
   @Min(2)
   @Max(365)
   repeatTimes?: number | null;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => Series)
+  series?: Series;
 
   // explicit opt-in to publish an already-PUBLISHED post again; without it a
   // schedule/now save targeting a published post is rejected

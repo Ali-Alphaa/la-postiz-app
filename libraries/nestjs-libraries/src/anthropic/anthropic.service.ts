@@ -73,6 +73,12 @@ const LeadMessagesPrompt = z.object({
   ),
 });
 
+const SeriesVariationsPrompt = z.object({
+  variations: z.array(
+    z.string().describe('One version of the post, same message and facts')
+  ),
+});
+
 const SwipeExamplesPrompt = z.object({
   examples: z.array(
     z.object({
@@ -391,6 +397,44 @@ Rules:
   }
 
   // the ready to send messages of a lead magnet, one per conversation type
+  // one rewrite of a post per send of a same-day repeat, same message
+  async generateSeriesVariations(
+    text: string,
+    count: number,
+    maxLength: number,
+    styleGuide?: string
+  ): Promise<AiResult<string[]>> {
+    const result = await this.parse(
+      SeriesVariationsPrompt,
+      `You rewrite one social media post of a trading educator into several versions that are posted through the same day. Their niche is ${NICHE}.
+${
+  styleGuide?.trim()
+    ? `Use the creator's vocabulary and attitude from their style guide:
+<style_guide>
+${styleGuide.trim()}
+</style_guide>`
+    : ''
+}
+Rules:
+- Write exactly ${count} versions, in the order they are posted.
+- Keep the same message, facts, numbers and call to action. Change the hook, the wording and the structure.
+- Keep every link, @mention and hashtag exactly as written in the original. Never add a link.
+- Each version is at most ${maxLength} characters.
+- Never promise or imply profit, income, a win rate or a result.
+- No version should open with the same words as another.`,
+      `<post>
+${text}
+</post>`,
+      'medium'
+    );
+
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return { status: 'ok', data: result.data.variations };
+  }
+
   async generateLeadMessages(
     magnet: { title: string; description?: string | null },
     slots: ReadonlyArray<{ position: number; label: string; tone: string }>,

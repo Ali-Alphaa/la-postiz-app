@@ -32,6 +32,7 @@ import {
   RepeatComponent,
   RepeatTimes,
 } from '@gitroom/frontend/components/launches/repeat.component';
+import { SeriesEditor } from '@gitroom/frontend/components/launches/series.component';
 import { TagsComponent } from '@gitroom/frontend/components/launches/tags.component';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
@@ -105,6 +106,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     setRepeater,
     repeatTimes,
     setRepeatTimes,
+    series,
+    setSeries,
     tags,
     setTags,
     integrations,
@@ -128,6 +131,8 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       setRepeater: state.setRepeater,
       repeatTimes: state.repeatTimes,
       setRepeatTimes: state.setRepeatTimes,
+      series: state.series,
+      setSeries: state.setSeries,
       tags: state.tags,
       setTags: state.setTags,
       selectedIntegrations: state.selectedIntegrations,
@@ -214,6 +219,59 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
     },
     [integrations]
   );
+
+  // the sends of a same-day repeat start at the chosen date, a new date means
+  // the approved sends no longer match
+  useEffect(() => {
+    if (
+      series?.slots?.[0] &&
+      series.slots[0].date !== date.utc().format('YYYY-MM-DDTHH:mm:ss')
+    ) {
+      setSeries(undefined);
+      toaster.show(
+        t(
+          'series_date_changed',
+          'The date changed, so the repeat during the day was removed. Set it up again.'
+        ),
+        'warning'
+      );
+    }
+  }, [date]);
+
+  const openSeries = useCallback(async () => {
+    const values = await ref.current?.getAllValues?.();
+    const baseHtml: string = values?.[0]?.values?.[0]?.content || '';
+    if (!selectedIntegrations.length) {
+      toaster.show(t('series_pick_channel', 'Pick a channel first'), 'warning');
+      return;
+    }
+    if (!baseHtml.replace(/<[^>]+>/g, '').trim()) {
+      toaster.show(t('series_write_first', 'Write the post first'), 'warning');
+      return;
+    }
+
+    const isX = selectedIntegrations.some((p) =>
+      p.integration.identifier.startsWith('x')
+    );
+    modal.openModal({
+      id: 'series-repeat',
+      title: t('series_repeat_during_day_label', 'Repeat during the day...'),
+      children: (
+        <SeriesEditor
+          start={date.valueOf()}
+          baseHtml={baseHtml}
+          integrationId={selectedIntegrations[0].integration.id}
+          isX={isX}
+          maxLength={isX ? 280 : 2000}
+          initial={series}
+          onApprove={(approved) => {
+            setSeries(approved);
+            modal.closeById('series-repeat');
+          }}
+        />
+      ),
+    });
+  }, [selectedIntegrations, date, series]);
 
   const askClose = useCallback(async () => {
     if (!activateExitButton || dummy) {
@@ -752,8 +810,16 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       const data = {
         type,
         ...(republish ? { republish } : {}),
-        ...(repeater ? { inter: repeater } : {}),
-        ...(repeater ? { repeatTimes: repeatTimes || null } : {}),
+        ...(repeater && !series ? { inter: repeater } : {}),
+        ...(repeater && !series ? { repeatTimes: repeatTimes || null } : {}),
+        ...(series
+          ? {
+              series: {
+                intervalMinutes: series.intervalMinutes,
+                slots: series.slots,
+              },
+            }
+          : {}),
         tags,
         shortLink,
         date: date.utc().format('YYYY-MM-DDTHH:mm:ss'),
@@ -843,6 +909,7 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
       ref,
       repeater,
       repeatTimes,
+      series,
       tags,
       date,
       channelDates,
@@ -1162,6 +1229,19 @@ export const ManageModal: FC<AddEditModalProps> = (props) => {
 
             {!dummy && !!repeater && (
               <RepeatTimes value={repeatTimes} onChange={setRepeatTimes} />
+            )}
+
+            {!dummy && !existingData?.integration && (
+              <button
+                type="button"
+                onClick={openSeries}
+                className="border border-newTextColor/10 rounded-[8px] h-[44px] px-[16px] flex items-center gap-[8px] text-[15px] font-[600] whitespace-nowrap cursor-pointer"
+              >
+                <RepeatIcon />
+                {series
+                  ? `${t('series_repeat_during_day', 'Repeat today')}: ${series.label}`
+                  : t('series_repeat_during_day_label', 'Repeat during the day...')}
+              </button>
             )}
           </div>
           <div className="pe-[20px] flex items-center justify-end gap-[8px]">
