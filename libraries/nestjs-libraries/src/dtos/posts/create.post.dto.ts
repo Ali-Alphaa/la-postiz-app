@@ -120,7 +120,7 @@ class Series {
 
   @IsArray()
   @ArrayMinSize(2)
-  @ArrayMaxSize(24)
+  @ArrayMaxSize(50)
   @ValidateNested({ each: true })
   @Type(() => SeriesSlot)
   slots: SeriesSlot[];
@@ -132,7 +132,7 @@ export class SeriesVariationsDto {
 
   @IsInt()
   @Min(2)
-  @Max(24)
+  @Max(50)
   count: number;
 
   @IsOptional()

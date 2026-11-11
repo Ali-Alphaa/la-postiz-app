@@ -17,7 +17,7 @@ export interface SeriesPayload {
 }
 
 const MIN_MINUTES = 15;
-const MAX_SENDS = 24;
+const MAX_SENDS = 50;
 const ZONES = [
   { id: 'UTC', label: 'UTC' },
   { id: 'America/New_York', label: 'US Eastern' },
