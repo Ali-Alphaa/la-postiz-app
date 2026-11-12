@@ -136,7 +136,7 @@ const CTA_RULES: Array<[string, RegExp]> = [
   ['engage', /\?\s*$|\b(what do you think|thoughts|agree)\b/i],
 ];
 
-interface MixPost {
+export interface MixPost {
   id: string;
   state: string;
   publishDate: Date;
@@ -159,7 +159,7 @@ interface MixPost {
   } | null;
 }
 
-interface Flag {
+export interface Flag {
   code: string;
   severity: 'high' | 'medium';
   message: string;
