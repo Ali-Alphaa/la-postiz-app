@@ -66,6 +66,23 @@ export class MixRepository {
     });
   }
 
+  // when the channel first published, the best hours of its own results need weeks of history
+  async getFirstPublished(orgId: string, integrationId: string) {
+    return (
+      await this._post.model.post.findFirst({
+        where: {
+          organizationId: orgId,
+          integrationId,
+          deletedAt: null,
+          parentPostId: null,
+          state: 'PUBLISHED',
+        },
+        orderBy: { publishDate: 'asc' },
+        select: { publishDate: true },
+      })
+    )?.publishDate;
+  }
+
   upsertLabel(
     orgId: string,
     postId: string,

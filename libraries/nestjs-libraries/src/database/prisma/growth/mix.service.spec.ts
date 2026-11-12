@@ -46,6 +46,7 @@ const build = (posts: any[] = [], extra: Record<string, any> = {}) => {
     getPosts: jest.fn().mockResolvedValue(posts),
     getTargets: jest.fn().mockResolvedValue(extra.targets || []),
     getUpcomingDates: jest.fn().mockResolvedValue(extra.upcoming || []),
+    getFirstPublished: jest.fn().mockResolvedValue(extra.first),
     getPost: jest.fn().mockResolvedValue(extra.post || null),
     upsertLabel: jest.fn().mockResolvedValue({}),
   };
@@ -294,6 +295,7 @@ describe('MixService', () => {
   it('suggests the hours of its own results outside market hours', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-12-01T05:00:00Z'));
     const { service } = build([], {
+      first: new Date('2026-08-01T10:00:00Z'),
       best: {
         isDefault: false,
         topSlots: [{ hour: 9 }, { hour: 12 }, { hour: 17 }],
@@ -305,6 +307,37 @@ describe('MixService', () => {
       '2026-12-01 12:00',
       '2026-12-01 17:00',
     ]);
+  });
+
+  it('keeps the plan times until the channel has 60 days of history', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-12-01T05:00:00Z'));
+    const { service } = build([], {
+      first: new Date('2026-11-01T10:00:00Z'),
+      best: { isDefault: false, topSlots: [{ hour: 12 }] },
+    });
+    const result = await service.suggest('org', 'x1');
+    expect(result.source).toBe('plan');
+  });
+
+  it('flags a results post missing half of the risk line, a sales cap and profit claims', async () => {
+    const label = (pillar: string) => ({
+      format: 'text',
+      pillar,
+      cta: 'none',
+      source: 'AUTO',
+    });
+    const { service } = build([
+      post({ id: 'r', content: 'Recap, risk is high', label: label('receipts') }),
+      post({ id: 'o1', label: label('offer') }),
+      post({ id: 'o2', label: label('offer'), publishDate: new Date('2026-07-16T11:00:00Z') }),
+      post({ id: 'o3', label: label('offer'), publishDate: new Date('2026-07-17T11:00:00Z') }),
+      post({ id: 'c', content: 'This setup is risk free and guaranteed profits' }),
+    ]);
+    const week = await service.getWeek('org', '2026-07-15');
+    const codes = week.channels[0].flags.map((p) => p.code);
+    expect(codes).toEqual(
+      expect.arrayContaining(['results_risk_line', 'offer_cap', 'claims'])
+    );
   });
 
   it('only moves a post that is waiting to be sent', async () => {

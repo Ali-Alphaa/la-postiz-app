@@ -9,7 +9,10 @@ import { PostsService } from '@gitroom/nestjs-libraries/database/prisma/posts/po
 import { IntegrationService } from '@gitroom/nestjs-libraries/database/prisma/integrations/integration.service';
 import { AnthropicService } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
 import { timezoneOffset } from '@gitroom/helpers/utils/growth.metrics';
-import { stripPostHtml } from '@gitroom/helpers/utils/trading.compliance';
+import {
+  checkTradingCompliance,
+  stripPostHtml,
+} from '@gitroom/helpers/utils/trading.compliance';
 import {
   MIX_CTAS,
   MIX_FORMATS,
@@ -28,6 +31,9 @@ const LABEL_FUTURE_DAYS = 30;
 const DUPLICATE_DAYS = 56;
 const DUPLICATE_SIMILARITY = 0.8;
 const OFFER_EVERY = 5;
+const OFFER_PER_WEEK = 2;
+// a channel's own results replace the plan times after this long, timing is noise before
+const OWN_DATA_DAYS = 60;
 const OFFER_SPACING = 3 * DAY;
 const ADVANCE_SCHEDULE = DAY;
 const SUGGESTIONS = 6;
@@ -96,7 +102,8 @@ const TRADING_HOURS = [8, 11];
 const HASHTAG_LIMIT: Record<string, number> = { instagram: 5 };
 
 const VIDEO = /\.(mp4|mov|webm|m4v)(\?|$)/i;
-const RISK_WORDING = /\b(risk|not (financial )?advice|educational)\b/i;
+const RISK_WORDING = /\brisk\b/i;
+const NOT_ADVICE_WORDING = /\b(not (financial )?advice|educational)\b/i;
 
 // when AI is not available the pillar and the call to action come from keywords
 const PILLAR_RULES: Array<[string, RegExp]> = [
@@ -373,6 +380,21 @@ export class MixService {
       );
     }
 
+    add(
+      'offer_cap',
+      'medium',
+      `More than ${OFFER_PER_WEEK} sales posts in a week on this channel`,
+      offers.length > OFFER_PER_WEEK ? offers : []
+    );
+    add(
+      'claims',
+      'high',
+      'Wording that promises or implies profit, check it before it goes out',
+      week.filter((p) =>
+        checkTradingCompliance(p.content).some((f) => f.severity === 'high')
+      )
+    );
+
     const tooClose = offers.filter(
       (p, index) =>
         index > 0 &&
@@ -390,8 +412,11 @@ export class MixService {
     add(
       'results_risk_line',
       'high',
-      'Results post without a risk line (risk of loss, past results, educational only)',
-      receipts.filter((p) => !RISK_WORDING.test(stripPostHtml(p.content)))
+      'Results post without the risk line (risk of loss and educational, not financial advice)',
+      receipts.filter((p) => {
+        const text = stripPostHtml(p.content);
+        return !RISK_WORDING.test(text) || !NOT_ADVICE_WORDING.test(text);
+      })
     );
     add(
       'results_prescheduled',
@@ -653,7 +678,14 @@ export class MixService {
       )
     ).map((p) => p.publishDate.getTime());
 
-    const own = best.isDefault
+    const firstResult = await this._mixRepository.getFirstPublished(
+      orgId,
+      integrationId
+    );
+    const enoughHistory =
+      !!firstResult && now - firstResult.getTime() >= OWN_DATA_DAYS * DAY;
+
+    const own = best.isDefault || !enoughHistory
       ? null
       : best.topSlots
           .map((p) => p.hour)
