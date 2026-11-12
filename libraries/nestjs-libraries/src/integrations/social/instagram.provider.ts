@@ -71,7 +71,16 @@ export class InstagramProvider
     if (firstPost.length > 10) {
       return 'Instagram carousel only supports up to 10 media attachments';
     }
-    if (this.assetBoolean(settings?.is_trial_reel)) {
+    if (
+      settings?.post_type === 'carousel' &&
+      (firstPost.length < 2 || firstPost.length > 10)
+    ) {
+      return 'A carousel needs between 2 and 10 images or videos';
+    }
+    if (
+      settings?.post_type !== 'carousel' &&
+      this.assetBoolean(settings?.is_trial_reel)
+    ) {
       if ((firstPost?.length ?? 0) > 1) {
         return 'Trial Reels can only have one video';
       }
@@ -82,7 +91,7 @@ export class InstagramProvider
         return 'Trial Reels must be a video';
       }
     }
-    if (settings?.audio?.id) {
+    if (settings?.audio?.id && settings?.post_type !== 'carousel') {
       if (settings?.post_type === 'story') {
         return 'Audio can only be added to Reels, not to Stories';
       }
@@ -748,8 +757,10 @@ export class InstagramProvider
     const [accessToken] = token.split('___');
     const [firstPost] = postDetails;
     const isStory = firstPost.settings.post_type === 'story';
+    // a carousel only takes its media and the caption
+    const isCarouselType = firstPost.settings.post_type === 'carousel';
     const collaborators =
-      firstPost?.settings?.collaborators?.length && !isStory
+      firstPost?.settings?.collaborators?.length && !isStory && !isCarouselType
         ? `&collaborators=${encodeURIComponent(
             JSON.stringify(
               firstPost?.settings?.collaborators.map((p) =>
@@ -758,7 +769,8 @@ export class InstagramProvider
             )
           )}`
         : ``;
-    const isTrialReel = this.assetBoolean(firstPost.settings.is_trial_reel);
+    const isTrialReel =
+      !isCarouselType && this.assetBoolean(firstPost.settings.is_trial_reel);
     const medias = await Promise.all(
       firstPost?.media?.map(async (m) => {
         const caption =

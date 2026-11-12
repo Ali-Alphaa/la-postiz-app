@@ -20,6 +20,10 @@ const postType = [
     label: 'Post / Reel',
   },
   {
+    value: 'carousel',
+    label: 'Carousel (2-10 images or videos)',
+  },
+  {
     value: 'story',
     label: 'Story',
   },
@@ -40,11 +44,12 @@ const InstagramCollaborators: FC<{
 }> = (props) => {
   const t = useT();
   const { watch, register, formState, control } = useSettings();
-  const { integration } = useIntegration();
+  const { integration, value } = useIntegration();
   const postCurrentType = watch('post_type');
   const isTrialReel = watch('is_trial_reel');
   // The Audio API is only available with Facebook Login, not Instagram Login
   const supportsAudio = integration?.identifier === 'instagram';
+  const slides = value?.[0]?.image?.length || 0;
   return (
     <>
       <Select
@@ -61,7 +66,23 @@ const InstagramCollaborators: FC<{
         ))}
       </Select>
 
-      {postCurrentType !== 'story' && (
+      {postCurrentType === 'carousel' && (
+        <div
+          className={
+            slides >= 2 && slides <= 10
+              ? 'text-[13px] text-newTextColor/60 mt-[6px]'
+              : 'text-[13px] text-red-400 mt-[6px]'
+          }
+        >
+          {t(
+            'carousel_slides_count',
+            'Slides: {{count}} of 10. Add 2 to 10 images or videos, people swipe through them in this order.',
+            { count: slides }
+          )}
+        </div>
+      )}
+
+      {postCurrentType !== 'story' && postCurrentType !== 'carousel' && (
         <InstagramCollaboratorsTags
           label="Collaborators (max 3) - accounts can't be private"
           {...register('collaborators', {

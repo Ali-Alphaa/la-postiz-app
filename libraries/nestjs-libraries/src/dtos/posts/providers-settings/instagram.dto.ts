@@ -49,9 +49,9 @@ export class InstagramAudio {
   video_volume?: number;
 }
 export class InstagramDto {
-  @IsIn(['post', 'story'])
+  @IsIn(['post', 'story', 'carousel'])
   @IsDefined()
-  post_type: 'post' | 'story';
+  post_type: 'post' | 'story' | 'carousel';
 
   @IsOptional()
   is_trial_reel?: boolean;
