@@ -7,6 +7,10 @@ import {
   X_FORMATS,
   X_HOOK_TYPES,
 } from '@gitroom/nestjs-libraries/dtos/growth/x.inspiration.dto';
+import {
+  MIX_CTAS,
+  MIX_PILLARS,
+} from '@gitroom/nestjs-libraries/dtos/growth/mix.dto';
 
 // Claude (Anthropic) features of the growth pages. Every method degrades
 // instead of throwing: the callers turn the status into a message.
@@ -27,6 +31,16 @@ const AnalysisPrompt = z.object({
       hookType: z.enum(X_HOOK_TYPES),
       format: z.enum(X_FORMATS),
       onNiche: z.boolean(),
+    })
+  ),
+});
+
+const PostLabelsPrompt = z.object({
+  posts: z.array(
+    z.object({
+      id: z.string(),
+      pillar: z.enum(MIX_PILLARS as [string, ...string[]]),
+      cta: z.enum(MIX_CTAS as [string, ...string[]]),
     })
   ),
 });
@@ -139,6 +153,14 @@ export interface TweetToAnalyze {
   text: string;
   mediaType: string;
 }
+
+export interface PostToLabel {
+  id: string;
+  platform: string;
+  text: string;
+}
+
+export type PostLabelAnalysis = z.infer<typeof PostLabelsPrompt>['posts'][number];
 
 export type TweetAnalysis = z.infer<typeof AnalysisPrompt>['tweets'][number];
 
@@ -276,6 +298,28 @@ Return exactly one entry per post, with the id it was given.`,
     }
 
     return { status: 'ok', data: result.data.tweets };
+  }
+
+  // up to 40 posts per call
+  async labelPosts(
+    posts: PostToLabel[]
+  ): Promise<AiResult<PostLabelAnalysis[]>> {
+    const result = await this.parse(
+      PostLabelsPrompt,
+      `You label the posts of a futures and forex trading educator so the weekly mix of content can be balanced.
+For every post return:
+- pillar: receipts (proof: pre-market plan, session recap, trades, scorecard, statement, losing-trade breakdown), rulebook (one rule, checklist, setup or sizing lesson), risk_psychology (drawdown, base rates, tilt, why not trading), student_stories (student journals and process), behind_scenes (desk, routine, identity), offer (the mentorship or programme, applications, who it is not for) or other
+- cta: none, engage (asks for replies or opinions), comment_dm (asks to comment or reply a keyword to get something) or link (sends to a link, the bio or a lead magnet)
+Return exactly one entry per post, with the id it was given.`,
+      JSON.stringify(posts),
+      'low'
+    );
+
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return { status: 'ok', data: result.data.posts };
   }
 
   async generateVoiceGuide(

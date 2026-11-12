@@ -31,6 +31,13 @@ import {
   CompetitorDto,
   InspirationQueryDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/competitor.dto';
+import { MixService } from '@gitroom/nestjs-libraries/database/prisma/growth/mix.service';
+import {
+  MixDayQueryDto,
+  MixLabelDto,
+  MixMoveDto,
+  MixTargetsDto,
+} from '@gitroom/nestjs-libraries/dtos/growth/mix.dto';
 import { XInspirationService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.inspiration.service';
 import { XFetcherService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.fetcher.service';
 import { XNativeService } from '@gitroom/nestjs-libraries/database/prisma/growth/x.native.service';
@@ -61,7 +68,8 @@ export class GrowthController {
     private _xInspirationService: XInspirationService,
     private _xFetcherService: XFetcherService,
     private _xNativeService: XNativeService,
-    private _xVoiceService: XVoiceService
+    private _xVoiceService: XVoiceService,
+    private _mixService: MixService
   ) {}
 
   @Get('/settings')
@@ -75,6 +83,63 @@ export class GrowthController {
     @Body() body: GrowthSettingsDto
   ) {
     return this._growthSettingsService.updateSettings(org.id, body);
+  }
+
+  @Get('/mix/day')
+  getMixDay(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: MixDayQueryDto
+  ) {
+    return this._mixService.getDay(org.id, query.date);
+  }
+
+  @Get('/mix/week')
+  getMixWeek(
+    @GetOrgFromRequest() org: Organization,
+    @Query() query: MixDayQueryDto
+  ) {
+    return this._mixService.getWeek(org.id, query.date);
+  }
+
+  @Post('/mix/label')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  labelMix(@GetOrgFromRequest() org: Organization) {
+    return this._mixService.labelPending(org.id);
+  }
+
+  @Put('/mix/posts/:postId/label')
+  setMixLabel(
+    @GetOrgFromRequest() org: Organization,
+    @Param('postId') postId: string,
+    @Body() body: MixLabelDto
+  ) {
+    return this._mixService.setLabel(org.id, postId, body);
+  }
+
+  @Post('/mix/posts/:postId/move')
+  moveMixPost(
+    @GetOrgFromRequest() org: Organization,
+    @Param('postId') postId: string,
+    @Body() body: MixMoveDto
+  ) {
+    return this._mixService.move(org.id, postId, body.date);
+  }
+
+  @Put('/mix/targets/:integrationId')
+  setMixTargets(
+    @GetOrgFromRequest() org: Organization,
+    @Param('integrationId') integrationId: string,
+    @Body() body: MixTargetsDto
+  ) {
+    return this._mixService.setTargets(org.id, integrationId, body.targets);
+  }
+
+  @Get('/mix/suggest/:integrationId')
+  suggestMix(
+    @GetOrgFromRequest() org: Organization,
+    @Param('integrationId') integrationId: string
+  ) {
+    return this._mixService.suggest(org.id, integrationId);
   }
 
   @Get('/best-time/:integrationId')
