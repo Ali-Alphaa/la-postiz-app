@@ -55,7 +55,16 @@ export class InstagramStandaloneProvider
     if (!firstPost?.length) {
       return 'Should have at least one media';
     }
-    if (this.assetBoolean(settings?.is_trial_reel)) {
+    if (
+      settings?.post_type === 'carousel' &&
+      (firstPost.length < 2 || firstPost.length > 10)
+    ) {
+      return 'A carousel needs between 2 and 10 images or videos';
+    }
+    if (
+      settings?.post_type !== 'carousel' &&
+      this.assetBoolean(settings?.is_trial_reel)
+    ) {
       if ((firstPost?.length ?? 0) > 1) {
         return 'Trial Reels can only have one video';
       }

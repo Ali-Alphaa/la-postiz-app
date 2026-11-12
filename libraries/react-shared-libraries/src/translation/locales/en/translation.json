@@ -1216,5 +1216,6 @@
   "schedule_mix_description": "What was sent and what is due, by format, content pillar and call to action, in UK time. Set weekly targets per channel to see the gaps. Pillar and call to action are labelled by Claude and you can change any label.",
   "mix_today": "Day",
   "mix_week": "Week",
-  "mix_labelling": "Labelling posts..."
+  "mix_labelling": "Labelling posts...",
+  "carousel_slides_count": "Slides: {{count}} of 10. Add 2 to 10 images or videos, people swipe through them in this order."
 }
