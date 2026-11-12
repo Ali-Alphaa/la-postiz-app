@@ -10,6 +10,7 @@ import { useSearchParams } from 'next/navigation';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { SVGLine } from '@gitroom/frontend/components/launches/launches.component';
 import { useGrowthSettings } from '@gitroom/frontend/components/growth/growth.hooks';
+import { ScheduleMix } from '@gitroom/frontend/components/growth/mix';
 import { BestTime } from '@gitroom/frontend/components/growth/best.time';
 import { Hashtags } from '@gitroom/frontend/components/growth/hashtags';
 import { UtmSettings } from '@gitroom/frontend/components/growth/utm.settings';
@@ -34,6 +35,7 @@ export const GrowthComponent: FC = () => {
   const list = useMemo(
     () => [
       { tab: 'best_time', label: t('best_time_to_post', 'Best time to post') },
+      { tab: 'mix', label: t('schedule_mix', 'Schedule mix') },
       { tab: 'hashtags', label: t('hashtags', 'Hashtags') },
       { tab: 'utm', label: t('utm_tracking', 'UTM tracking links') },
       {
@@ -86,6 +88,7 @@ export const GrowthComponent: FC = () => {
       </div>
       <div className="bg-newBgColorInner flex-1 min-w-0 flex-col flex p-[20px] mobile:p-[12px] gap-[12px] overflow-y-auto">
         {tab === 'best_time' && <BestTime />}
+        {tab === 'mix' && <ScheduleMix />}
         {tab === 'hashtags' && <Hashtags />}
         {tab === 'utm' && <UtmSettings />}
         {tab === 'recycle' && <Recycle />}

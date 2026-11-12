@@ -52,6 +52,8 @@ model Organization {
   conversions         Conversion[]
   leadMagnets         LeadMagnet[]
   musicTracks         MusicTrack[]
+  postLabels          PostLabel[]
+  mixTargets          MixTarget[]
   bioPage             BioPage?
   weeklyReviews       WeeklyReview[]
   inboxItems          InboxItem[]
@@ -423,6 +425,7 @@ model Integration {
   recycleSettings       RecycleSettings?
   postRecycles          PostRecycle[]
   abExperiments         AbExperiment[]
+  mixTargets            MixTarget[]
 
   @@unique([organizationId, internalId])
   @@index([rootInternalId])
@@ -532,6 +535,7 @@ model Post {
   recycledAs                 PostRecycle[]             @relation("recycleSource")
   recycledFrom               PostRecycle[]             @relation("recycleTarget")
   abVariant                  AbVariant?
+  label                      PostLabel?
 
   @@index([group])
   @@index([batchId])
@@ -2433,4 +2437,39 @@ model DmSend {
   automation   DmAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
 
   @@unique([automationId, authorId])
+}
+
+// How a post is labelled for the schedule mix: format comes from its media,
+// pillar and call to action from Claude (AUTO), a keyword rule (RULE) or the user (MANUAL)
+model PostLabel {
+  id             String       @id @default(uuid())
+  organizationId String
+  postId         String       @unique
+  format         String
+  pillar         String
+  cta            String
+  source         String       @default("AUTO")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  post           Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+// Weekly goal of a channel: kind is format, pillar or cta, value one of its options
+model MixTarget {
+  id             String       @id @default(uuid())
+  organizationId String
+  integrationId  String
+  kind           String
+  value          String
+  perWeek        Int
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@unique([integrationId, kind, value])
+  @@index([organizationId])
 }

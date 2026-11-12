@@ -67,6 +67,8 @@ import { InboxRepository } from '@gitroom/nestjs-libraries/database/prisma/inbox
 import { InboxService } from '@gitroom/nestjs-libraries/database/prisma/inbox/inbox.service';
 import { LeadLinksRepository } from '@gitroom/nestjs-libraries/database/prisma/lead-links/lead.links.repository';
 import { LeadLinksService } from '@gitroom/nestjs-libraries/database/prisma/lead-links/lead.links.service';
+import { MixRepository } from '@gitroom/nestjs-libraries/database/prisma/growth/mix.repository';
+import { MixService } from '@gitroom/nestjs-libraries/database/prisma/growth/mix.service';
 import { MusicRepository } from '@gitroom/nestjs-libraries/database/prisma/music/music.repository';
 import { MusicService } from '@gitroom/nestjs-libraries/database/prisma/music/music.service';
 import { SwipeRepository } from '@gitroom/nestjs-libraries/database/prisma/swipe/swipe.repository';
@@ -147,6 +149,8 @@ import { XVoiceService } from '@gitroom/nestjs-libraries/database/prisma/growth/
     XVoiceService,
     LeadLinksRepository,
     LeadLinksService,
+    MixRepository,
+    MixService,
     MusicRepository,
     MusicService,
     SwipeRepository,

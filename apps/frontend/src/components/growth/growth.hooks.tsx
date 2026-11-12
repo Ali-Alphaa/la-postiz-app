@@ -186,3 +186,27 @@ export const errorMessage = async (response: Response, fallback: string) => {
     return fallback;
   }
 };
+
+export const useMixDay = (date: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/growth/mix/day?date=${date}`)).json();
+  }, [date]);
+  return useSWR(`growth-mix-day-${date}`, load);
+};
+
+export const useMixWeek = (date: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/growth/mix/week?date=${date}`)).json();
+  }, [date]);
+  return useSWR(`growth-mix-week-${date}`, load);
+};
+
+export const useMixSuggest = (integrationId: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/growth/mix/suggest/${integrationId}`)).json();
+  }, [integrationId]);
+  return useSWR(`growth-mix-suggest-${integrationId}`, load);
+};
