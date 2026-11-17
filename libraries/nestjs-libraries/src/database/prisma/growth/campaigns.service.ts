@@ -186,7 +186,8 @@ export class CampaignsService {
     content: string,
     pillar: string,
     maxLength: number,
-    provider = ''
+    provider = '',
+    profile = 'trading'
   ): CampaignFlag[] {
     const text = stripPostHtml(content);
     const length = countLength(this.baseProvider(provider), text);
@@ -206,7 +207,9 @@ export class CampaignsService {
         message: `${length} characters, the channel takes ${maxLength}`,
       });
     }
-    for (const flag of checkTradingCompliance(content)) {
+    for (const flag of profile === 'trading'
+      ? checkTradingCompliance(content)
+      : []) {
       flags.push({
         code: 'claims',
         severity: flag.severity,
@@ -214,6 +217,7 @@ export class CampaignsService {
       });
     }
     if (
+      profile === 'trading' &&
       pillar === 'receipts' &&
       (!RISK_WORDING.test(text) || !NOT_ADVICE_WORDING.test(text))
     ) {
@@ -248,6 +252,7 @@ export class CampaignsService {
         startDate: campaign.startDate,
         days: campaign.days,
         playbook: campaign.playbook,
+        profile: campaign.profile,
         status: campaign.status,
         total: campaign.posts.length,
         counts,
@@ -273,6 +278,7 @@ export class CampaignsService {
       startDate: campaign.startDate,
       days: campaign.days,
       playbook: campaign.playbook,
+      profile: campaign.profile,
       tone: campaign.tone,
       notes: campaign.notes,
       status: campaign.status,
@@ -282,7 +288,8 @@ export class CampaignsService {
           post.content,
           post.pillar,
           this.maxLength(post.integration.providerIdentifier),
-          post.integration.providerIdentifier
+          post.integration.providerIdentifier,
+          campaign.profile
         );
         return {
           id: post.id,
@@ -353,7 +360,11 @@ export class CampaignsService {
           needsMedia,
           day: slot.day + 1,
           role: roles[index].role,
-          pillar: roles[index].pillar,
+          // risk and psychology posts only exist for trading
+          pillar:
+            body.profile === 'web_studio' && roles[index].pillar === 'risk_psychology'
+              ? 'rulebook'
+              : roles[index].pillar,
           integrationId: integration.id,
           date: slot.date,
           time: slot.time,
@@ -372,7 +383,12 @@ export class CampaignsService {
       );
     }
 
-    const voice = await this._xVoiceService.resolve(orgId, {});
+    const profile = body.profile || 'trading';
+    // the saved X voice is the trading voice
+    const voice =
+      profile === 'trading'
+        ? await this._xVoiceService.resolve(orgId, {})
+        : undefined;
     const brief = {
       name: body.name,
       goal: body.goal,
@@ -381,6 +397,7 @@ export class CampaignsService {
       magnetTitle: magnet.title,
       magnetDescription: magnet.description || undefined,
       voice: voice?.styleGuide || undefined,
+      profile,
     };
     const aiSlots = skeleton.map(
       ({ slot, platform, maxLength, needsMedia, day, role, pillar }) => ({
@@ -457,6 +474,7 @@ export class CampaignsService {
         startDate: new Date(`${body.startDate}T00:00:00Z`),
         days,
         playbook,
+        profile,
         tone: body.tone,
         notes: body.notes,
       },
@@ -704,6 +722,7 @@ export class CampaignsService {
       leadMagnetId: campaign.leadMagnetId || '',
       startDate: body.startDate,
       playbook: campaign.playbook,
+      profile: campaign.profile,
       integrationIds: [...new Set(campaign.posts.map((p) => p.integrationId))],
       tone: campaign.tone || undefined,
       notes: campaign.notes || undefined,
@@ -765,7 +784,8 @@ export class CampaignsService {
       post.content,
       post.pillar,
       this.maxLength(post.integration.providerIdentifier),
-      post.integration.providerIdentifier
+      post.integration.providerIdentifier,
+      post.campaign.profile
     ).filter((p) => p.severity === 'high');
     if (blocking.length) {
       throw new BadRequestException(

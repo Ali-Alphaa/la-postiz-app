@@ -79,6 +79,7 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
     leadMagnetId: '',
     startDate: ukToday(1),
     playbook: 'lead_magnet_7',
+    profile: 'trading',
     tone: '',
     notes: '',
   });
@@ -102,6 +103,7 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
         leadMagnetId: values.leadMagnetId || available[0]?.id,
         startDate: values.startDate,
         playbook: values.playbook,
+        profile: values.profile,
         integrationIds: channels,
         tone: values.tone || undefined,
         notes: values.notes || undefined,
@@ -142,6 +144,21 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
         value={values.goal}
         onChange={(e) => set('goal', e.target.value)}
       />
+      <Select
+        label={t('campaign_profile', 'Business')}
+        name="campaignProfile"
+        disableForm={true}
+        hideErrors={true}
+        value={values.profile}
+        onChange={(e) => set('profile', e.target.value)}
+      >
+        <option value="trading">
+          {t('campaign_profile_trading', 'Trading education')}
+        </option>
+        <option value="web_studio">
+          {t('campaign_profile_web_studio', 'PXL Haus, websites for trades')}
+        </option>
+      </Select>
       <Select
         label={t('campaign_lead_magnet', 'Lead magnet to give away')}
         name="campaignMagnet"
@@ -982,6 +999,8 @@ export const Campaigns: FC = () => {
               <div className="flex-1 min-w-[200px]">
                 <div className="text-[15px] font-semibold">{campaign.name}</div>
                 <div className="text-[13px] text-newTextColor/60">
+                  {campaign.profile === 'web_studio' &&
+                    `${t('campaign_profile_web_studio_short', 'PXL Haus')} · `}
                   {campaign.playbook === 'lead_magnet_14'
                     ? t('campaign_playbook_14', 'Lead magnet, 14 days')
                     : t('campaign_playbook_7', 'Lead magnet, 7 days')}{' '}

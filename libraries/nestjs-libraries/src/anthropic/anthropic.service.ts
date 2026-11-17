@@ -186,6 +186,48 @@ export interface CampaignSlot {
   pillar: string;
 }
 
+// What Claude is told about the business of a campaign. Trading is the default.
+const CAMPAIGN_PROFILES: Record<
+  string,
+  {
+    intro: string;
+    rules: string[];
+    offerExample: string;
+    mediaExamples: string;
+    valueRole: string;
+    proofRole: string;
+  }
+> = {
+  trading: {
+    intro:
+      'You write the posts of a short marketing campaign for a UK futures and forex trading educator. The campaign gives away a free lead magnet to grow an email list that later hears about a mentorship.',
+    rules: [
+      '- Sell the process (rules, journalling, checklists, reviewing sessions), never the outcome. No income, profit or return claims, no "guaranteed", no lifestyle or wealth imagery, no signals or "take this trade" calls.',
+      '- Results or recap posts (pillar receipts) must end with this risk line: "Trading futures and forex involves substantial risk of loss. Past results don\'t predict future results. Educational content only, not financial advice."',
+    ],
+    offerExample: 'Free rulebook here: {{link}}',
+    mediaExamples: 'a hook, a chart screenshot, a checklist',
+    valueRole: 'one useful rule or lesson',
+    proofRole: 'a process or journal example, no P&L',
+  },
+  web_studio: {
+    intro:
+      'You write the posts of a short marketing campaign for PXL Haus, a small UK web design studio that builds websites for local trades (plumbers, electricians, builders, cleaners, dojos and similar) and sets up their Google listing so local customers find them and call direct. The campaign shows a free sample website to bring trade business owners to the studio, where they can book a free website plan.',
+    rules: [
+      '- Talk to a busy tradesperson in plain, friendly British English. No jargon, no agency buzzwords, no "digital transformation".',
+      '- Show the work, do not boast. The sample is a concept build, never call it a real client. Never invent client names, testimonials, reviews, results, rankings or customer numbers, and never promise page one of Google or a number of enquiries.',
+      '- Never state a price, discount or turnaround unless the brief notes give it.',
+    ],
+    offerExample: 'See the sample site we built: {{link}}',
+    mediaExamples:
+      'a screen recording of the sample site, a before and after, a quick tip on camera',
+    valueRole:
+      'one practical tip for a local trade getting found online, such as the Google listing, click-to-call, photos or a quote form',
+    proofRole:
+      'a behind the scenes look at building the sample site, no invented clients or results',
+  },
+};
+
 export interface CampaignBrief {
   name: string;
   goal?: string;
@@ -194,6 +236,8 @@ export interface CampaignBrief {
   magnetTitle: string;
   magnetDescription?: string;
   voice?: string;
+  // the kind of business the campaign is for, trading when empty
+  profile?: string;
 }
 
 export type CampaignDraft = z.infer<typeof CampaignDraftPrompt>['posts'][number];
@@ -341,18 +385,19 @@ Return exactly one entry per post, with the id it was given.`,
     brief: CampaignBrief,
     slots: CampaignSlot[]
   ): Promise<AiResult<CampaignDraft[]>> {
+    const profile =
+      CAMPAIGN_PROFILES[brief.profile || ''] || CAMPAIGN_PROFILES.trading;
     const result = await this.parse(
       CampaignDraftPrompt,
-      `You write the posts of a short marketing campaign for a UK futures and forex trading educator. The campaign gives away a free lead magnet to grow an email list that later hears about a mentorship.
+      `${profile.intro}
 Rules you always follow:
-- Sell the process (rules, journalling, checklists, reviewing sessions), never the outcome. No income, profit or return claims, no "guaranteed", no lifestyle or wealth imagery, no signals or "take this trade" calls.
+${profile.rules.join('\n')}
 - Never invent scarcity, countdowns or deadlines. If the brief gives no deadline, do not mention one.
-- Results or recap posts (pillar receipts) must end with this risk line: "Trading futures and forex involves substantial risk of loss. Past results don't predict future results. Educational content only, not financial advice."
-- Posts with role offer carry exactly one soft call to action and the token {{link}} where the link goes, for example "Free rulebook here: {{link}}". Other roles carry no link.
+- Posts with role offer carry exactly one soft call to action and the token {{link}} where the link goes, for example "${profile.offerExample}". Other roles carry no link.
 - Every post of a platform says something different: new hook, new example, never a copy of another post in the campaign.
 - Respect each slot's maxLength (characters). X posts use at most 2 hashtags, Instagram at most 5 specific hashtags, TikTok captions stay short.
-- needsMedia slots also get a mediaIdea: one sentence on the picture, carousel or 20 to 45 second video to make (a hook, a chart screenshot, a checklist). Text only slots get an empty mediaIdea.
-- Roles: teaser (curiosity, no link), value (one useful rule or lesson), proof (a process or journal example, no P&L), offer (the free lead magnet), last (a final reminder of the offer, calm, no pressure).
+- needsMedia slots also get a mediaIdea: one sentence on the picture, carousel or 20 to 45 second video to make (${profile.mediaExamples}). Text only slots get an empty mediaIdea.
+- Roles: teaser (curiosity, no link), value (${profile.valueRole}), proof (${profile.proofRole}), offer (the free lead magnet), last (a final reminder of the offer, calm, no pressure).
 - TikTok slots: the caption is at most 150 characters with at most 3 hashtags, and the mediaIdea holds the whole 20 to 45 second video script: a hook for the first 3 seconds, three short beats, and the call to action.
 Write in the voice described, plain British English. Return exactly one entry per slot, with the slot number it was given.`,
       JSON.stringify({ brief, slots }),
