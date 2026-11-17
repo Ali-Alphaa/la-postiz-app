@@ -16,6 +16,7 @@ import {
 } from '@gitroom/nestjs-libraries/anthropic/anthropic.service';
 import { makeId } from '@gitroom/nestjs-libraries/services/make.is';
 import { addUtmToUrl } from '@gitroom/helpers/utils/utm.links';
+import { countLength } from '@gitroom/helpers/utils/count.length';
 import {
   checkTradingCompliance,
   stripPostHtml,
@@ -179,8 +180,16 @@ export class CampaignsService {
     });
   }
 
-  flags(content: string, pillar: string, maxLength: number): CampaignFlag[] {
+  // The length is counted the way the channel counts it (X counts a link as
+  // 23 characters, so the long tracking link does not make a post too long).
+  flags(
+    content: string,
+    pillar: string,
+    maxLength: number,
+    provider = ''
+  ): CampaignFlag[] {
     const text = stripPostHtml(content);
+    const length = countLength(this.baseProvider(provider), text);
     const flags: CampaignFlag[] = [];
 
     if (!text) {
@@ -190,11 +199,11 @@ export class CampaignsService {
         message: 'The post is empty',
       });
     }
-    if (text.length > maxLength) {
+    if (length > maxLength) {
       flags.push({
         code: 'too_long',
         severity: 'high',
-        message: `${text.length} characters, the channel takes ${maxLength}`,
+        message: `${length} characters, the channel takes ${maxLength}`,
       });
     }
     for (const flag of checkTradingCompliance(content)) {
@@ -272,7 +281,8 @@ export class CampaignsService {
         const flags = this.flags(
           post.content,
           post.pillar,
-          this.maxLength(post.integration.providerIdentifier)
+          this.maxLength(post.integration.providerIdentifier),
+          post.integration.providerIdentifier
         );
         return {
           id: post.id,
@@ -754,7 +764,8 @@ export class CampaignsService {
     const blocking = this.flags(
       post.content,
       post.pillar,
-      this.maxLength(post.integration.providerIdentifier)
+      this.maxLength(post.integration.providerIdentifier),
+      post.integration.providerIdentifier
     ).filter((p) => p.severity === 'high');
     if (blocking.length) {
       throw new BadRequestException(
