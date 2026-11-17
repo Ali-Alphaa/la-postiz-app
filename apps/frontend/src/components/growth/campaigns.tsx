@@ -18,6 +18,7 @@ import {
   errorMessage,
   useCampaign,
   useCampaignMagnets,
+  useCampaignResults,
   useCampaigns,
   useGrowthIntegrations,
 } from '@gitroom/frontend/components/growth/growth.hooks';
@@ -398,6 +399,314 @@ const PostCard: FC<{ post: any; reload: () => void }> = ({ post, reload }) => {
   );
 };
 
+const count = (value: number) =>
+  new Intl.NumberFormat().format(Math.round(value));
+const perDay = (value: number | null) =>
+  value === null ? '-' : value.toFixed(1);
+const change = (value: number | null) =>
+  value === null
+    ? null
+    : `${value >= 0 ? '+' : ''}${Math.round(value * 100)}%`;
+
+const Stat: FC<{ label: string; value: string; hint?: string }> = ({
+  label,
+  value,
+  hint,
+}) => (
+  <GrowthCard className="flex flex-col gap-[4px] !p-[14px]">
+    <div className="text-[12px] text-newTextColor/60">{label}</div>
+    <div className="text-[22px] font-semibold tabular-nums">{value}</div>
+    {!!hint && <div className="text-[12px] text-newTextColor/60">{hint}</div>}
+  </GrowthCard>
+);
+
+const Comparison: FC<{
+  title: string;
+  now: string;
+  normal: string;
+  lift: number | null;
+  missing: string;
+}> = ({ title, now, normal, lift, missing }) => {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-[2px]">
+      <div className="text-[13px] text-newTextColor/60">{title}</div>
+      {lift === null ? (
+        <div className="text-[14px]">{missing}</div>
+      ) : (
+        <div className="text-[14px]">
+          <span className="font-semibold tabular-nums">{now}</span>{' '}
+          {t('campaign_against', 'against')}{' '}
+          <span className="tabular-nums">{normal}</span>{' '}
+          {t('campaign_normally', 'normally')}{' '}
+          <span
+            className={clsx(
+              'font-semibold tabular-nums',
+              lift >= 0 ? 'text-green-400' : 'text-red-400'
+            )}
+          >
+            ({change(lift)})
+          </span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const Results: FC<{ id: string }> = ({ id }) => {
+  const t = useT();
+  const { data } = useCampaignResults(id);
+
+  if (!data) {
+    return null;
+  }
+
+  const { totals, baseline, tracking } = data;
+  const maxDaily = Math.max(1, ...data.daily.map((p: any) => p.leads));
+  const status: Record<string, string> = {
+    NOT_SCHEDULED: t(
+      'campaign_results_not_scheduled',
+      'Nothing is scheduled yet, approve posts to start the campaign.'
+    ),
+    NOT_STARTED: t(
+      'campaign_results_not_started',
+      'The campaign has not started yet.'
+    ),
+    RUNNING: t('campaign_results_running', 'The campaign is running.'),
+    ENDED: t(
+      'campaign_results_ended',
+      'The campaign has ended, sign-ups after the last post still count for 3 days.'
+    ),
+  };
+
+  return (
+    <>
+      <div className="text-[14px] text-newTextColor/60">
+        {status[data.campaign.status]}
+      </div>
+
+      {!tracking.utmEnabled && (
+        <div className="text-[13px] px-[12px] py-[8px] rounded-[8px] bg-yellow-500/10">
+          {t(
+            'campaign_results_utm_off',
+            'UTM tracking links are off (Growth, UTM tracking links), so sign-ups cannot be credited to single posts. They still count for the campaign through its link.'
+          )}
+        </div>
+      )}
+      {tracking.utmEnabled && tracking.unattributed > 0 && (
+        <div className="text-[13px] px-[12px] py-[8px] rounded-[8px] bg-yellow-500/10">
+          {t(
+            'campaign_results_unattributed',
+            '{{count}} sign-ups came through the campaign link without a post, for example from a copied link.',
+            { count: tracking.unattributed }
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-5 mobile:grid-cols-2 gap-[10px]">
+        <Stat
+          label={t('campaign_results_signups', 'Sign-ups')}
+          value={count(totals.leads)}
+        />
+        <Stat
+          label={t('campaign_results_sent', 'Posts sent')}
+          value={`${totals.sent} / ${totals.posts}`}
+          hint={
+            totals.failed
+              ? t('campaign_results_failed', '{{count}} failed', {
+                  count: totals.failed,
+                })
+              : undefined
+          }
+        />
+        <Stat
+          label={t('campaign_results_impressions', 'Impressions')}
+          value={count(totals.impressions)}
+          hint={t('campaign_results_measured', '{{count}} posts measured', {
+            count: totals.measuredPosts,
+          })}
+        />
+        <Stat
+          label={t('campaign_results_engagement', 'Engagement')}
+          value={count(totals.engagement)}
+        />
+        <Stat
+          label={t('campaign_results_sales', 'Sales')}
+          value={
+            totals.sales
+              ? `${totals.sales} (${count(totals.salesValue)} ${totals.currencies.join('/')})`
+              : '0'
+          }
+          hint={
+            totals.sales
+              ? undefined
+              : t(
+                  'campaign_results_sales_hint',
+                  'Shows once sales are reported to Postiz'
+                )
+          }
+        />
+      </div>
+
+      <GrowthCard className="flex flex-col gap-[12px]">
+        <div className="text-[15px] font-semibold">
+          {t('campaign_results_vs_normal', 'Against a normal stretch')}
+        </div>
+        <Comparison
+          title={t(
+            'campaign_results_signups_day',
+            'Sign-ups a day, from any source'
+          )}
+          now={perDay(baseline.campaignLeadsPerDay)}
+          normal={perDay(baseline.leadsPerDay)}
+          lift={baseline.leadsLift}
+          missing={t(
+            'campaign_results_cannot_compare',
+            'Not enough to compare yet: the campaign has not started, or there were no sign-ups in the 4 weeks before it.'
+          )}
+        />
+        <Comparison
+          title={t('campaign_results_engagement_post', 'Engagement per post')}
+          now={perDay(baseline.campaignEngagementPerPost)}
+          normal={perDay(baseline.engagementPerPost)}
+          lift={baseline.engagementLift}
+          missing={t(
+            'campaign_results_cannot_compare_posts',
+            'Not enough to compare yet: no post of the campaign has analytics yet, or there were none in the 4 weeks before it. Refresh analytics in Best time to post.'
+          )}
+        />
+      </GrowthCard>
+
+      <GrowthCard className="overflow-x-auto">
+        <div className="text-[15px] font-semibold mb-[8px]">
+          {t('campaign_results_platforms', 'By platform')}
+        </div>
+        <table className="w-full text-[13px] min-w-[480px]">
+          <thead className="text-newTextColor/60">
+            <tr>
+              <th className="text-start font-normal">
+                {t('campaign_results_platform', 'Platform')}
+              </th>
+              <th className="text-end font-normal">
+                {t('campaign_results_sent', 'Posts sent')}
+              </th>
+              <th className="text-end font-normal">
+                {t('campaign_results_signups', 'Sign-ups')}
+              </th>
+              <th className="text-end font-normal">
+                {t('campaign_results_impressions', 'Impressions')}
+              </th>
+              <th className="text-end font-normal">
+                {t('campaign_results_engagement', 'Engagement')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.platforms.map((row: any) => (
+              <tr key={row.platform}>
+                <td className="py-[3px]">{row.platform}</td>
+                <td className="text-end tabular-nums">
+                  {row.sent} / {row.posts}
+                </td>
+                <td className="text-end tabular-nums">{row.leads}</td>
+                <td className="text-end tabular-nums">
+                  {count(row.impressions)}
+                </td>
+                <td className="text-end tabular-nums">
+                  {count(row.engagement)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </GrowthCard>
+
+      <GrowthCard className="overflow-x-auto">
+        <div className="text-[15px] font-semibold mb-[8px]">
+          {t('campaign_results_top_posts', 'Posts that brought the most sign-ups')}
+        </div>
+        {!data.posts.length && (
+          <div className="text-[13px] text-newTextColor/60">
+            {t('campaign_results_no_posts', 'No post has gone out yet.')}
+          </div>
+        )}
+        {!!data.posts.length && (
+          <table className="w-full text-[13px] min-w-[560px]">
+            <thead className="text-newTextColor/60">
+              <tr>
+                <th className="text-start font-normal">
+                  {t('campaign_results_post', 'Post')}
+                </th>
+                <th className="text-end font-normal">
+                  {t('campaign_results_signups', 'Sign-ups')}
+                </th>
+                <th className="text-end font-normal">
+                  {t('campaign_results_impressions', 'Impressions')}
+                </th>
+                <th className="text-end font-normal">
+                  {t('campaign_results_engagement', 'Engagement')}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.posts.map((post: any) => (
+                <tr key={post.id}>
+                  <td className="py-[3px]">
+                    <div>
+                      {post.releaseURL ? (
+                        <a
+                          href={post.releaseURL}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="underline"
+                        >
+                          {post.channel}
+                        </a>
+                      ) : (
+                        post.channel
+                      )}{' '}
+                      <span className="text-newTextColor/60">
+                        {post.preview}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="text-end tabular-nums">{post.leads}</td>
+                  <td className="text-end tabular-nums">
+                    {count(post.impressions)}
+                  </td>
+                  <td className="text-end tabular-nums">
+                    {count(post.engagement)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </GrowthCard>
+
+      <GrowthCard className="flex flex-col gap-[6px]">
+        <div className="text-[15px] font-semibold">
+          {t('campaign_results_daily', 'Sign-ups a day (UK time)')}
+        </div>
+        {data.daily.map((day: any) => (
+          <div key={day.date} className="flex items-center gap-[10px] text-[13px]">
+            <div className="w-[88px] tabular-nums text-newTextColor/60">
+              {day.date}
+            </div>
+            <div className="flex-1 h-[10px] rounded-[4px] bg-newBgColor overflow-hidden">
+              <div
+                className="h-full bg-btnPrimary"
+                style={{ width: `${(day.leads / maxDaily) * 100}%` }}
+              />
+            </div>
+            <div className="w-[28px] text-end tabular-nums">{day.leads}</div>
+          </div>
+        ))}
+      </GrowthCard>
+    </>
+  );
+};
+
 const CampaignDetail: FC<{ id: string; onBack: () => void }> = ({
   id,
   onBack,
@@ -405,6 +714,7 @@ const CampaignDetail: FC<{ id: string; onBack: () => void }> = ({
   const t = useT();
   const { data, mutate } = useCampaign(id);
   const { mutate: reloadList } = useCampaigns();
+  const [view, setView] = useState<'posts' | 'results'>('posts');
 
   const reload = useCallback(() => {
     mutate();
@@ -440,8 +750,23 @@ const CampaignDetail: FC<{ id: string; onBack: () => void }> = ({
           {t('campaign_scheduled_count', 'scheduled')} · {counts('DRAFT')}{' '}
           {t('campaign_waiting_count', 'waiting for you')}
         </div>
+        <div className="flex gap-[8px] ms-auto">
+          <Button
+            secondary={view !== 'posts'}
+            onClick={() => setView('posts')}
+          >
+            {t('campaign_view_posts', 'Posts')}
+          </Button>
+          <Button
+            secondary={view !== 'results'}
+            onClick={() => setView('results')}
+          >
+            {t('campaign_view_results', 'Results')}
+          </Button>
+        </div>
       </div>
-      {days.map(([day, posts]) => (
+      {view === 'results' && <Results id={id} />}
+      {(view === 'posts' ? days : []).map(([day, posts]) => (
         <div key={day} className="flex flex-col gap-[10px]">
           <div className="text-[15px] font-semibold">
             {new Date(day + 'T12:00:00Z').toLocaleDateString(undefined, {

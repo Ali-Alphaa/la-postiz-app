@@ -47,6 +47,14 @@ export class CampaignsController {
     return this._campaignsService.getCampaign(org.id, id);
   }
 
+  @Get('/:id/results')
+  getResults(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._campaignsService.getResults(org.id, id);
+  }
+
   @Put('/posts/:id')
   updatePost(
     @GetOrgFromRequest() org: Organization,
