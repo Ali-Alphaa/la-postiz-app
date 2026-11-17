@@ -340,6 +340,29 @@ describe('MixService', () => {
     );
   });
 
+  it('plans the slots of a channel in UK time without the 07:15 plan post', () => {
+    const { service } = build();
+    // Monday 16 November 2026 (UK = UTC), a Sunday has no Instagram slot
+    const x = service.planSlots('x', '2026-11-16', 7);
+    expect(x.filter((p) => p.day === 0).map((p) => p.time)).toEqual([
+      '12:00',
+      '14:00',
+    ]);
+    expect(x.filter((p) => p.day === 2).map((p) => p.time)).toEqual([
+      '10:00',
+      '12:00',
+      '14:00',
+    ]);
+    expect(x[0].date.toISOString()).toBe('2026-11-16T12:00:00.000Z');
+
+    const instagram = service.planSlots('instagram', '2026-11-16', 7);
+    expect(instagram.map((p) => p.day)).toEqual([0, 1, 2, 3, 4]);
+    // summer time: 14:00 UK is 13:00 UTC
+    expect(
+      service.planSlots('instagram', '2026-07-13', 1)[0].date.toISOString()
+    ).toBe('2026-07-13T13:00:00.000Z');
+  });
+
   it('only moves a post that is waiting to be sent', async () => {
     const { service, postsService } = build([], {
       post: { id: 'a', state: 'PUBLISHED' },

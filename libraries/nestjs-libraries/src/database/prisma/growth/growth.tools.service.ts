@@ -76,11 +76,16 @@ export class GrowthToolsService {
 
   // Every row is handled on its own: a bad row is reported, the rest go through
   async bulkSchedule(orgId: string, body: BulkScheduleDto) {
-    const results: Array<{ row: number; ok: boolean; error?: string }> = [];
+    const results: Array<{
+      row: number;
+      ok: boolean;
+      error?: string;
+      postId?: string;
+    }> = [];
     for (const [index, row] of body.rows.entries()) {
       try {
-        await this.bulkRow(orgId, body.type, row);
-        results.push({ row: index + 1, ok: true });
+        const postId = await this.bulkRow(orgId, body.type, row);
+        results.push({ row: index + 1, ok: true, postId });
       } catch (err) {
         results.push({
           row: index + 1,
@@ -178,6 +183,7 @@ export class GrowthToolsService {
     if (!created?.postId) {
       throw new BadRequestException('The post could not be created');
     }
+    return created.postId as string;
   }
 
   // utm_content holds the id of the post the visitor came from

@@ -53,6 +53,8 @@ model Organization {
   leadMagnets         LeadMagnet[]
   musicTracks         MusicTrack[]
   postLabels          PostLabel[]
+  campaigns           Campaign[]
+  campaignPosts       CampaignPost[]
   mixTargets          MixTarget[]
   bioPage             BioPage?
   weeklyReviews       WeeklyReview[]
@@ -426,6 +428,7 @@ model Integration {
   postRecycles          PostRecycle[]
   abExperiments         AbExperiment[]
   mixTargets            MixTarget[]
+  campaignPosts         CampaignPost[]
 
   @@unique([organizationId, internalId])
   @@index([rootInternalId])
@@ -2471,5 +2474,55 @@ model MixTarget {
   integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
 
   @@unique([integrationId, kind, value])
+  @@index([organizationId])
+}
+
+// A marketing push: a brief, and the posts Claude drafted for it that the owner approves one by one
+model Campaign {
+  id             String         @id @default(uuid())
+  organizationId String
+  name           String
+  goal           String?
+  leadMagnetId   String?
+  // the tracked links carry it as utm_campaign, unique per organization
+  slug           String
+  startDate      DateTime
+  days           Int            @default(7)
+  tone           String?
+  notes          String?
+  // DRAFT until a post is approved, then ACTIVE
+  status         String         @default("DRAFT")
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  posts          CampaignPost[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+}
+
+// DRAFT, APPROVED (waiting for its time), NEEDS_MEDIA (kept as a calendar draft), REJECTED
+model CampaignPost {
+  id             String       @id @default(uuid())
+  campaignId     String
+  organizationId String
+  integrationId  String
+  publishAt      DateTime
+  pillar         String
+  // what the picture or video should show, for channels that need media
+  mediaIdea      String?
+  content        String
+  status         String       @default("DRAFT")
+  // the Postiz post created when it was approved
+  postId         String?
+  note           String?
+  sortOrder      Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  campaign       Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration    Integration  @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([campaignId])
   @@index([organizationId])
 }
