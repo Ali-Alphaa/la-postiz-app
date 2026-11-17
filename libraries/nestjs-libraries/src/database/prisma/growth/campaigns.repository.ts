@@ -44,6 +44,7 @@ export class CampaignsRepository {
         startDate: true,
         days: true,
         playbook: true,
+        profile: true,
         status: true,
         posts: { select: { status: true } },
       },
@@ -62,6 +63,7 @@ export class CampaignsRepository {
         startDate: true,
         days: true,
         playbook: true,
+        profile: true,
         tone: true,
         notes: true,
         status: true,
@@ -80,6 +82,7 @@ export class CampaignsRepository {
       startDate: Date;
       days: number;
       playbook: string;
+      profile: string;
       tone?: string;
       notes?: string;
     },
@@ -110,7 +113,7 @@ export class CampaignsRepository {
       select: {
         ...POST_SELECT,
         campaignId: true,
-        campaign: { select: { id: true, status: true } },
+        campaign: { select: { id: true, status: true, profile: true } },
       },
     });
   }

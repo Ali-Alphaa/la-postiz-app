@@ -152,6 +152,7 @@ const savedPost = (over: Record<string, any> = {}) => ({
   status: 'DRAFT',
   integrationId: 'x1',
   campaignId: 'c1',
+  campaign: { id: 'c1', status: 'DRAFT', profile: 'trading' },
   publishAt: future(24),
   pillar: 'rulebook',
   content: 'One rule for the opening range',
@@ -356,6 +357,51 @@ describe('CampaignsService', () => {
     expect(codes('Get it {{link}}')).toContain('link_token');
     expect(codes('x'.repeat(300))).toContain('too_long');
     expect(codes('')).toContain('empty');
+  });
+
+  it('leaves the trading claim and risk line checks to trading campaigns', () => {
+    const { service } = build();
+    const codes = (content: string, pillar: string, profile: string) =>
+      service.flags(content, pillar, 280, 'x', profile).map((p) => p.code);
+
+    // a web studio post can say guaranteed and needs no trading risk line
+    expect(
+      codes('Our 7 day site guarantee', 'receipts', 'web_studio')
+    ).toEqual([]);
+    // the same text is still checked for a trading campaign
+    expect(codes('Guaranteed profits, risk free', 'rulebook', 'trading')).toContain(
+      'claims'
+    );
+    // the basic checks apply to every business
+    expect(codes('x'.repeat(300), 'rulebook', 'web_studio')).toContain(
+      'too_long'
+    );
+  });
+
+  it('approves a web studio post that a trading campaign would block', async () => {
+    const { service, tools } = build({
+      post: savedPost({
+        content: 'Guaranteed to be live in 7 working days',
+        campaign: { id: 'c1', status: 'DRAFT', profile: 'web_studio' },
+      }),
+    });
+    await service.approvePost('org', 'cp1');
+    expect(tools.bulkSchedule).toHaveBeenCalled();
+  });
+
+  it('writes a web studio campaign for the studio, with no saved trading voice', async () => {
+    const { service, repository, anthropic } = build();
+    await service.createCampaign('org', { ...body, profile: 'web_studio' } as any);
+
+    expect(anthropic.draftCampaign.mock.calls[0][0].profile).toBe('web_studio');
+    expect(anthropic.draftCampaign.mock.calls[0][0].voice).toBeUndefined();
+    expect(repository.createCampaign.mock.calls[0][1].profile).toBe(
+      'web_studio'
+    );
+    // no trading pillars on the posts
+    expect(
+      repository.createCampaign.mock.calls[0][2].map((p: any) => p.pillar)
+    ).not.toContain('risk_psychology');
   });
 
   it('counts a link as 23 characters on X so a tracked link does not make a post too long', () => {

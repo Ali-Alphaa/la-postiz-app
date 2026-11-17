@@ -2490,6 +2490,8 @@ model Campaign {
   days           Int            @default(7)
   // the shape of the campaign: lead_magnet_7 or lead_magnet_14
   playbook       String         @default("lead_magnet_7")
+  // the kind of business the posts are written for: trading or web_studio
+  profile        String         @default("trading")
   tone           String?
   notes          String?
   // DRAFT until a post is approved, then ACTIVE, ARCHIVED when it is put away

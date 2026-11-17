@@ -16,6 +16,8 @@ import {
 
 export const CAMPAIGN_PLAYBOOKS = ['lead_magnet_7', 'lead_magnet_14'];
 
+export const CAMPAIGN_PROFILES = ['trading', 'web_studio'];
+
 export class CampaignDto {
   @IsString()
   @IsDefined()
@@ -48,6 +50,10 @@ export class CampaignDto {
   @IsOptional()
   @IsIn(CAMPAIGN_PLAYBOOKS)
   playbook?: string;
+
+  @IsOptional()
+  @IsIn(CAMPAIGN_PROFILES)
+  profile?: string;
 
   @IsArray()
   @ArrayMinSize(1)
