@@ -353,6 +353,7 @@ Rules you always follow:
 - Respect each slot's maxLength (characters). X posts use at most 2 hashtags, Instagram at most 5 specific hashtags, TikTok captions stay short.
 - needsMedia slots also get a mediaIdea: one sentence on the picture, carousel or 20 to 45 second video to make (a hook, a chart screenshot, a checklist). Text only slots get an empty mediaIdea.
 - Roles: teaser (curiosity, no link), value (one useful rule or lesson), proof (a process or journal example, no P&L), offer (the free lead magnet), last (a final reminder of the offer, calm, no pressure).
+- TikTok slots: the caption is at most 150 characters with at most 3 hashtags, and the mediaIdea holds the whole 20 to 45 second video script: a hook for the first 3 seconds, three short beats, and the call to action.
 Write in the voice described, plain British English. Return exactly one entry per slot, with the slot number it was given.`,
       JSON.stringify({ brief, slots }),
       'medium'

@@ -2488,9 +2488,11 @@ model Campaign {
   slug           String
   startDate      DateTime
   days           Int            @default(7)
+  // the shape of the campaign: lead_magnet_7 or lead_magnet_14
+  playbook       String         @default("lead_magnet_7")
   tone           String?
   notes          String?
-  // DRAFT until a post is approved, then ACTIVE
+  // DRAFT until a post is approved, then ACTIVE, ARCHIVED when it is put away
   status         String         @default("DRAFT")
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt

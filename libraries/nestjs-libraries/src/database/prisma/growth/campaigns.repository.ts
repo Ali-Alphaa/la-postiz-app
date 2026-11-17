@@ -43,6 +43,7 @@ export class CampaignsRepository {
         goal: true,
         startDate: true,
         days: true,
+        playbook: true,
         status: true,
         posts: { select: { status: true } },
       },
@@ -60,6 +61,7 @@ export class CampaignsRepository {
         leadMagnetId: true,
         startDate: true,
         days: true,
+        playbook: true,
         tone: true,
         notes: true,
         status: true,
@@ -77,6 +79,7 @@ export class CampaignsRepository {
       leadMagnetId: string;
       startDate: Date;
       days: number;
+      playbook: string;
       tone?: string;
       notes?: string;
     },
@@ -204,6 +207,15 @@ export class CampaignsRepository {
         select: { utmEnabled: true },
       })
     )?.utmEnabled;
+  }
+
+  // only a campaign of the organization is changed
+  async setCampaignStatus(orgId: string, id: string, status: string) {
+    const { count } = await this._campaign.model.campaign.updateMany({
+      where: { id, organizationId: orgId },
+      data: { status },
+    });
+    return count > 0;
   }
 
   activateCampaign(id: string) {

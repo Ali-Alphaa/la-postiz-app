@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsDefined,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -12,6 +13,8 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+export const CAMPAIGN_PLAYBOOKS = ['lead_magnet_7', 'lead_magnet_14'];
 
 export class CampaignDto {
   @IsString()
@@ -34,11 +37,17 @@ export class CampaignDto {
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   startDate: string;
 
+  // the playbook sets the length, this is only read when there is no playbook
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(3)
   @Max(21)
-  days: number;
+  days?: number;
+
+  @IsOptional()
+  @IsIn(CAMPAIGN_PLAYBOOKS)
+  playbook?: string;
 
   @IsArray()
   @ArrayMinSize(1)
@@ -68,4 +77,16 @@ export class CampaignPostDto {
   @IsString()
   @MaxLength(40)
   publishAt?: string;
+}
+
+export class CampaignDuplicateDto {
+  // YYYY-MM-DD in UK time
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  startDate: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  name?: string;
 }

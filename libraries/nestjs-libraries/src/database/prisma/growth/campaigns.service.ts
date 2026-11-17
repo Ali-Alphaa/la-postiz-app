@@ -22,10 +22,18 @@ import {
 } from '@gitroom/helpers/utils/trading.compliance';
 import {
   CampaignDto,
+  CampaignDuplicateDto,
   CampaignPostDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/campaign.dto';
 
-const MAX_SLOTS = 60;
+const MAX_SLOTS = 90;
+// slots written by Claude in one call, longer campaigns are drafted in parallel batches
+const DRAFT_BATCH = 45;
+// how long a playbook runs
+const PLAYBOOK_DAYS: Record<string, number> = {
+  lead_magnet_7: 7,
+  lead_magnet_14: 14,
+};
 const DAY = 86400000;
 // a normal stretch is measured over the 4 weeks before the campaign
 const BASELINE_DAYS = 28;
@@ -106,7 +114,49 @@ export class CampaignsService {
   // the role of every slot of one channel: a teaser first, the offer at about
   // 40%, a last reminder at the end when there are enough posts, value and
   // proof in between
-  private roles(count: number) {
+  private roles(slots: Array<{ day: number }>, playbook: string) {
+    if (playbook !== 'lead_magnet_14') {
+      return this.singleWeekRoles(slots.length);
+    }
+
+    // the first week warms up with a teaser, value and proof, the second week
+    // pushes the offer on its first post, with a last reminder at the end
+    const roles: Array<{ role: string; pillar: string }> = [];
+    const value = (position: number) => ({
+      role: 'value',
+      pillar: position % 2 ? 'risk_psychology' : 'rulebook',
+    });
+    const indexes = (from: number, to: number) =>
+      slots.flatMap((slot, index) =>
+        slot.day >= from && slot.day < to ? [index] : []
+      );
+
+    const one = indexes(0, 7);
+    one.forEach((slot, position) => {
+      roles[slot] =
+        position === 0 && one.length >= 2
+          ? { role: 'teaser', pillar: 'risk_psychology' }
+          : position === Math.round(0.6 * (one.length - 1)) && one.length >= 4
+          ? { role: 'proof', pillar: 'behind_scenes' }
+          : value(position);
+    });
+
+    const two = indexes(7, 1000);
+    two.forEach((slot, position) => {
+      roles[slot] =
+        position === 0 && two.length >= 2
+          ? { role: 'offer', pillar: 'offer' }
+          : position === two.length - 1 && two.length >= 4
+          ? { role: 'last', pillar: 'offer' }
+          : position === Math.round(0.5 * (two.length - 1)) && two.length >= 5
+          ? { role: 'proof', pillar: 'behind_scenes' }
+          : value(position);
+    });
+
+    return roles;
+  }
+
+  private singleWeekRoles(count: number) {
     const offer = count >= 3 ? Math.max(1, Math.round(0.4 * (count - 1))) : -1;
     const proof = Math.round(0.7 * (count - 1));
     return [...Array(count)].map((_, index) => {
@@ -188,6 +238,7 @@ export class CampaignsService {
         goal: campaign.goal,
         startDate: campaign.startDate,
         days: campaign.days,
+        playbook: campaign.playbook,
         status: campaign.status,
         total: campaign.posts.length,
         counts,
@@ -212,6 +263,7 @@ export class CampaignsService {
       slug: campaign.slug,
       startDate: campaign.startDate,
       days: campaign.days,
+      playbook: campaign.playbook,
       tone: campaign.tone,
       notes: campaign.notes,
       status: campaign.status,
@@ -270,15 +322,18 @@ export class CampaignsService {
     }
 
     // the skeleton: when each post goes out and what it is for
+    const playbook =
+      body.playbook || (body.days === 14 ? 'lead_magnet_14' : 'lead_magnet_7');
+    const days = PLAYBOOK_DAYS[playbook];
     const now = Date.now();
     const skeleton: Array<
       CampaignSlot & { integrationId: string; date: Date; time: string }
     > = [];
     for (const integration of integrations) {
       const slots = this._mixService
-        .planSlots(integration.providerIdentifier, body.startDate, body.days)
+        .planSlots(integration.providerIdentifier, body.startDate, days)
         .filter((p) => p.date.getTime() > now + SOON);
-      const roles = this.roles(slots.length);
+      const roles = this.roles(slots, playbook);
       const needsMedia = await this.needsMedia(integration.providerIdentifier);
       slots.forEach((slot, index) => {
         skeleton.push({
@@ -308,36 +363,46 @@ export class CampaignsService {
     }
 
     const voice = await this._xVoiceService.resolve(orgId, {});
-    const draft = await this._anthropicService.draftCampaign(
-      {
-        name: body.name,
-        goal: body.goal,
-        tone: body.tone,
-        notes: body.notes,
-        magnetTitle: magnet.title,
-        magnetDescription: magnet.description || undefined,
-        voice: voice?.styleGuide || undefined,
-      },
-      skeleton.map(
-        ({ slot, platform, maxLength, needsMedia, day, role, pillar }) => ({
-          slot,
-          platform,
-          maxLength,
-          needsMedia,
-          day,
-          role,
-          pillar,
-        })
+    const brief = {
+      name: body.name,
+      goal: body.goal,
+      tone: body.tone,
+      notes: body.notes,
+      magnetTitle: magnet.title,
+      magnetDescription: magnet.description || undefined,
+      voice: voice?.styleGuide || undefined,
+    };
+    const aiSlots = skeleton.map(
+      ({ slot, platform, maxLength, needsMedia, day, role, pillar }) => ({
+        slot,
+        platform,
+        maxLength,
+        needsMedia,
+        day,
+        role,
+        pillar,
+      })
+    );
+    const batches: CampaignSlot[][] = [];
+    for (let index = 0; index < aiSlots.length; index += DRAFT_BATCH) {
+      batches.push(aiSlots.slice(index, index + DRAFT_BATCH));
+    }
+    const written = await Promise.all(
+      batches.map((batch) =>
+        this._anthropicService.draftCampaign(brief, batch)
       )
     );
-    if (draft.status !== 'ok') {
+    const failed = written.find((p) => p.status !== 'ok');
+    if (failed) {
       throw new BadRequestException(
-        draft.status === 'rate_limited'
+        failed.status === 'rate_limited'
           ? 'Claude is busy, try again in a minute'
           : 'Claude could not draft the campaign, try again'
       );
     }
-    const drafts = new Map(draft.data.map((p) => [p.slot, p]));
+    const drafts = new Map(
+      written.flatMap((p) => (p.status === 'ok' ? p.data : [])).map((p) => [p.slot, p])
+    );
     if (skeleton.some((p) => !drafts.has(p.slot))) {
       throw new BadRequestException(
         'Claude did not write every post, try again'
@@ -380,7 +445,8 @@ export class CampaignsService {
         slug,
         leadMagnetId: magnet.id,
         startDate: new Date(`${body.startDate}T00:00:00Z`),
-        days: body.days,
+        days,
+        playbook,
         tone: body.tone,
         notes: body.notes,
       },
@@ -586,6 +652,52 @@ export class CampaignsService {
         unattributed: leads.filter((p) => !p.postId).length,
       },
     };
+  }
+
+  // Puts a finished campaign away. Its posts and results stay, and posts that
+  // are already scheduled in the calendar are not touched.
+  async archiveCampaign(orgId: string, id: string) {
+    if (!(await this._repository.setCampaignStatus(orgId, id, 'ARCHIVED'))) {
+      throw new NotFoundException('Campaign not found');
+    }
+    return { status: 'ARCHIVED' };
+  }
+
+  async unarchiveCampaign(orgId: string, id: string) {
+    const campaign = await this._repository.getCampaign(orgId, id);
+    if (!campaign) {
+      throw new NotFoundException('Campaign not found');
+    }
+    const status = campaign.posts.some((p) =>
+      ['APPROVED', 'NEEDS_MEDIA'].includes(p.status)
+    )
+      ? 'ACTIVE'
+      : 'DRAFT';
+    await this._repository.setCampaignStatus(orgId, id, status);
+    return { status };
+  }
+
+  // A new campaign with the brief, playbook and channels of an earlier one, on a
+  // new start date. Claude writes new posts, nothing is copied from the old ones.
+  async duplicateCampaign(
+    orgId: string,
+    id: string,
+    body: CampaignDuplicateDto
+  ) {
+    const campaign = await this._repository.getCampaign(orgId, id);
+    if (!campaign) {
+      throw new NotFoundException('Campaign not found');
+    }
+    return this.createCampaign(orgId, {
+      name: body.name || `${campaign.name} (again)`,
+      goal: campaign.goal || undefined,
+      leadMagnetId: campaign.leadMagnetId || '',
+      startDate: body.startDate,
+      playbook: campaign.playbook,
+      integrationIds: [...new Set(campaign.posts.map((p) => p.integrationId))],
+      tone: campaign.tone || undefined,
+      notes: campaign.notes || undefined,
+    });
   }
 
   private async postOrFail(orgId: string, id: string) {
