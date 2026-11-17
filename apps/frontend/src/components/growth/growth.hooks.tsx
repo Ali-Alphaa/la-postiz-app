@@ -210,3 +210,27 @@ export const useMixSuggest = (integrationId: string) => {
   }, [integrationId]);
   return useSWR(`growth-mix-suggest-${integrationId}`, load);
 };
+
+export const useCampaigns = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/campaigns')).json();
+  }, []);
+  return useSWR('growth-campaigns', load);
+};
+
+export const useCampaign = (id: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/campaigns/${id}`)).json();
+  }, [id]);
+  return useSWR(id ? `growth-campaign-${id}` : null, load);
+};
+
+export const useCampaignMagnets = () => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch('/lead-links')).json();
+  }, []);
+  return useSWR('growth-campaign-magnets', load);
+};

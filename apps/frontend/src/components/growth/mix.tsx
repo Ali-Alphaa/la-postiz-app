@@ -33,7 +33,7 @@ const OPTIONS: Record<string, string[]> = {
   pillar: PILLARS,
   cta: CTAS,
 };
-const LABELS: Record<string, string> = {
+export const LABELS: Record<string, string> = {
   text: 'Text',
   thread: 'Thread',
   image: 'Image',

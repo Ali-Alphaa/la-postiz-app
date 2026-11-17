@@ -61,6 +61,7 @@ import { InboxController } from '@gitroom/backend/api/routes/inbox.controller';
 import { SwipeController } from '@gitroom/backend/api/routes/swipe.controller';
 import { LeadLinksController } from '@gitroom/backend/api/routes/lead.links.controller';
 import { MusicController } from '@gitroom/backend/api/routes/music.controller';
+import { CampaignsController } from '@gitroom/backend/api/routes/campaigns.controller';
 import { GrowthController } from '@gitroom/backend/api/routes/growth.controller';
 
 const authenticatedController = [
@@ -85,6 +86,7 @@ const authenticatedController = [
   AnnouncementsController,
   AdminController,
   GrowthController,
+  CampaignsController,
   SwipeController,
   LeadLinksController,
   MusicController,

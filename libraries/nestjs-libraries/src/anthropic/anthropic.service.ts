@@ -45,6 +45,20 @@ const PostLabelsPrompt = z.object({
   ),
 });
 
+const CampaignDraftPrompt = z.object({
+  posts: z.array(
+    z.object({
+      slot: z.number().int(),
+      content: z
+        .string()
+        .describe('The post text, with {{link}} where the link of the offer goes'),
+      mediaIdea: z
+        .string()
+        .describe('What the picture or video shows, empty for a text only channel'),
+    })
+  ),
+});
+
 const RewritePrompt = z.object({
   drafts: z.array(
     z.object({
@@ -161,6 +175,28 @@ export interface PostToLabel {
 }
 
 export type PostLabelAnalysis = z.infer<typeof PostLabelsPrompt>['posts'][number];
+
+export interface CampaignSlot {
+  slot: number;
+  platform: string;
+  maxLength: number;
+  needsMedia: boolean;
+  day: number;
+  role: string;
+  pillar: string;
+}
+
+export interface CampaignBrief {
+  name: string;
+  goal?: string;
+  tone?: string;
+  notes?: string;
+  magnetTitle: string;
+  magnetDescription?: string;
+  voice?: string;
+}
+
+export type CampaignDraft = z.infer<typeof CampaignDraftPrompt>['posts'][number];
 
 export type TweetAnalysis = z.infer<typeof AnalysisPrompt>['tweets'][number];
 
@@ -298,6 +334,35 @@ Return exactly one entry per post, with the id it was given.`,
     }
 
     return { status: 'ok', data: result.data.tweets };
+  }
+
+  // One post for every slot of the campaign, up to 60 slots per call
+  async draftCampaign(
+    brief: CampaignBrief,
+    slots: CampaignSlot[]
+  ): Promise<AiResult<CampaignDraft[]>> {
+    const result = await this.parse(
+      CampaignDraftPrompt,
+      `You write the posts of a short marketing campaign for a UK futures and forex trading educator. The campaign gives away a free lead magnet to grow an email list that later hears about a mentorship.
+Rules you always follow:
+- Sell the process (rules, journalling, checklists, reviewing sessions), never the outcome. No income, profit or return claims, no "guaranteed", no lifestyle or wealth imagery, no signals or "take this trade" calls.
+- Never invent scarcity, countdowns or deadlines. If the brief gives no deadline, do not mention one.
+- Results or recap posts (pillar receipts) must end with this risk line: "Trading futures and forex involves substantial risk of loss. Past results don't predict future results. Educational content only, not financial advice."
+- Posts with role offer carry exactly one soft call to action and the token {{link}} where the link goes, for example "Free rulebook here: {{link}}". Other roles carry no link.
+- Every post of a platform says something different: new hook, new example, never a copy of another post in the campaign.
+- Respect each slot's maxLength (characters). X posts use at most 2 hashtags, Instagram at most 5 specific hashtags, TikTok captions stay short.
+- needsMedia slots also get a mediaIdea: one sentence on the picture, carousel or 20 to 45 second video to make (a hook, a chart screenshot, a checklist). Text only slots get an empty mediaIdea.
+- Roles: teaser (curiosity, no link), value (one useful rule or lesson), proof (a process or journal example, no P&L), offer (the free lead magnet), last (a final reminder of the offer, calm, no pressure).
+Write in the voice described, plain British English. Return exactly one entry per slot, with the slot number it was given.`,
+      JSON.stringify({ brief, slots }),
+      'medium'
+    );
+
+    if (result.status !== 'ok') {
+      return result;
+    }
+
+    return { status: 'ok', data: result.data.posts };
   }
 
   // up to 40 posts per call

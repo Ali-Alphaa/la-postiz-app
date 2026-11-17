@@ -95,6 +95,8 @@ const PRIOR_TIMES: Record<string, Record<number, string[]>> = {
   },
 };
 const FALLBACK_TIMES = ['09:00', '12:00', '17:00'];
+// posts a day of a platform in the plan, the others get one
+const PLAN_PER_DAY: Record<string, number> = { x: 3 };
 // the market hours, the audience is trading and a post gets little attention
 const TRADING_HOURS = [8, 11];
 
@@ -654,6 +656,41 @@ export class MixService {
 
     await this._mixRepository.replaceTargets(orgId, integrationId, targets);
     return { saved: targets.filter((p) => p.perWeek > 0).length };
+  }
+
+  // The times of the posting plan of a channel over some days, in UTC. The
+  // times in skip are left out (07:15 is the pre-market plan of the day).
+  planSlots(
+    provider: string,
+    startDate: string,
+    days: number,
+    skip: string[] = ['07:15']
+  ) {
+    const { y, m, d } = this.parseDate(startDate);
+    const base = this.baseProvider(provider);
+    const slots: Array<{ day: number; time: string; date: Date }> = [];
+
+    for (let day = 0; day < days; day++) {
+      const weekday = new Date(Date.UTC(y, m - 1, d + day)).getUTCDay();
+      const times = (
+        PRIOR_TIMES[base]
+          ? PRIOR_TIMES[base][weekday] || []
+          : FALLBACK_TIMES
+      )
+        .filter((time) => !skip.includes(time))
+        .slice(0, PLAN_PER_DAY[base] ?? 1);
+
+      for (const time of times) {
+        const [hh, mm] = time.split(':').map(Number);
+        slots.push({
+          day,
+          time,
+          date: this.localToUtc(y, m, d + day, hh, mm),
+        });
+      }
+    }
+
+    return slots;
   }
 
   // The next free times of a channel: the hours of its own best posts once
