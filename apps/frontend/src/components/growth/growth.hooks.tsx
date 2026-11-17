@@ -234,3 +234,11 @@ export const useCampaignMagnets = () => {
   }, []);
   return useSWR('growth-campaign-magnets', load);
 };
+
+export const useCampaignResults = (id: string) => {
+  const fetch = useFetch();
+  const load = useCallback(async () => {
+    return (await fetch(`/campaigns/${id}/results`)).json();
+  }, [id]);
+  return useSWR(id ? `growth-campaign-results-${id}` : null, load);
+};

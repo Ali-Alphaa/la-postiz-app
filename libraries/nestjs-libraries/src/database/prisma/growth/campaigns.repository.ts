@@ -26,7 +26,11 @@ const POST_SELECT = {
 export class CampaignsRepository {
   constructor(
     private _campaign: PrismaRepository<'campaign'>,
-    private _campaignPost: PrismaRepository<'campaignPost'>
+    private _campaignPost: PrismaRepository<'campaignPost'>,
+    private _conversion: PrismaRepository<'conversion'>,
+    private _postEngagement: PrismaRepository<'postEngagement'>,
+    private _post: PrismaRepository<'post'>,
+    private _growthSettings: PrismaRepository<'growthSettings'>
   ) {}
 
   getCampaigns(orgId: string) {
@@ -123,6 +127,83 @@ export class CampaignsRepository {
       data,
       select: POST_SELECT,
     });
+  }
+
+  // the sign-ups and sales that came through the links of a campaign
+  getConversions(orgId: string, slug: string) {
+    return this._conversion.model.conversion.findMany({
+      where: { organizationId: orgId, utmCampaign: slug },
+      select: {
+        type: true,
+        value: true,
+        currency: true,
+        utmSource: true,
+        postId: true,
+        createdAt: true,
+      },
+      take: 5000,
+    });
+  }
+
+  countLeads(orgId: string, from: Date, to: Date) {
+    return this._conversion.model.conversion.count({
+      where: {
+        organizationId: orgId,
+        type: 'lead',
+        createdAt: { gte: from, lt: to },
+      },
+    });
+  }
+
+  getEngagements(orgId: string, postIds: string[]) {
+    return this._postEngagement.model.postEngagement.findMany({
+      where: { organizationId: orgId, postId: { in: postIds } },
+      select: {
+        postId: true,
+        engagement: true,
+        impressions: true,
+      },
+    });
+  }
+
+  // what a normal post of these channels got before the campaign
+  async getBaselineEngagement(
+    orgId: string,
+    integrationIds: string[],
+    from: Date,
+    to: Date
+  ) {
+    const result = await this._postEngagement.model.postEngagement.aggregate({
+      where: {
+        organizationId: orgId,
+        integrationId: { in: integrationIds },
+        publishDate: { gte: from, lt: to },
+        post: { deletedAt: null },
+      },
+      _avg: { engagement: true, impressions: true },
+      _count: { _all: true },
+    });
+    return {
+      posts: result._count._all,
+      engagement: result._avg.engagement || 0,
+      impressions: result._avg.impressions || 0,
+    };
+  }
+
+  getPostStates(orgId: string, ids: string[]) {
+    return this._post.model.post.findMany({
+      where: { organizationId: orgId, id: { in: ids } },
+      select: { id: true, state: true, releaseURL: true },
+    });
+  }
+
+  async isUtmEnabled(orgId: string) {
+    return !!(
+      await this._growthSettings.model.growthSettings.findUnique({
+        where: { organizationId: orgId },
+        select: { utmEnabled: true },
+      })
+    )?.utmEnabled;
   }
 
   activateCampaign(id: string) {

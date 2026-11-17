@@ -26,6 +26,11 @@ import {
 } from '@gitroom/nestjs-libraries/dtos/growth/campaign.dto';
 
 const MAX_SLOTS = 60;
+const DAY = 86400000;
+// a normal stretch is measured over the 4 weeks before the campaign
+const BASELINE_DAYS = 28;
+// sign-ups that still come in after the last post count for the campaign
+const TAIL_DAYS = 3;
 const SOON = 15 * 60000;
 // from this many posts a channel gets a second offer post at the end
 const SECOND_OFFER_FROM = 10;
@@ -381,6 +386,206 @@ export class CampaignsService {
       },
       posts
     );
+  }
+
+  private ukDay(date: Date) {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/London',
+    }).format(date);
+  }
+
+  // How a campaign did: sign-ups credited to it (through utm_campaign, and to a
+  // post through utm_content), reach and engagement of its posts, and the
+  // comparison with a normal stretch before it started
+  async getResults(orgId: string, id: string) {
+    const campaign = await this._repository.getCampaign(orgId, id);
+    if (!campaign) {
+      throw new NotFoundException('Campaign not found');
+    }
+
+    const now = Date.now();
+    const start = campaign.startDate;
+    const end = new Date(start.getTime() + campaign.days * DAY);
+    const before = new Date(start.getTime() - BASELINE_DAYS * DAY);
+    const posts = campaign.posts.filter((p) => !!p.postId);
+    const postIds = posts.map((p) => p.postId as string);
+    const integrationIds = [
+      ...new Set(campaign.posts.map((p) => p.integrationId)),
+    ];
+
+    // all sign-ups of the same length so far, whatever brought them
+    const windowEnd = new Date(Math.min(now, end.getTime()));
+    const [
+      conversions,
+      engagements,
+      states,
+      utmEnabled,
+      baselineLeads,
+      windowLeads,
+      baseline,
+    ] = await Promise.all([
+        this._repository.getConversions(orgId, campaign.slug),
+        postIds.length
+          ? this._repository.getEngagements(orgId, postIds)
+          : Promise.resolve([]),
+        postIds.length
+          ? this._repository.getPostStates(orgId, postIds)
+          : Promise.resolve([]),
+        this._repository.isUtmEnabled(orgId),
+        this._repository.countLeads(orgId, before, start),
+        this._repository.countLeads(orgId, start, windowEnd),
+        this._repository.getBaselineEngagement(
+          orgId,
+          integrationIds,
+          before,
+          start
+        ),
+      ]);
+
+    const stateOf = new Map(states.map((p) => [p.id, p]));
+    const engagementOf = new Map(engagements.map((p) => [p.postId, p]));
+    const leads = conversions.filter((p) => p.type === 'lead');
+    const sales = conversions.filter((p) => p.type === 'sale');
+
+    const byPost = campaign.posts.map((post) => {
+      const state = post.postId ? stateOf.get(post.postId) : undefined;
+      const engagement = post.postId ? engagementOf.get(post.postId) : undefined;
+      return {
+        id: post.id,
+        channel: post.integration.name,
+        provider: this.baseProvider(post.integration.providerIdentifier),
+        pillar: post.pillar,
+        publishAt: post.publishAt.toISOString(),
+        preview: stripPostHtml(post.content).slice(0, 90),
+        state: state?.state || 'QUEUE',
+        scheduled: !!post.postId,
+        releaseURL: state?.releaseURL || null,
+        leads: post.postId
+          ? leads.filter((p) => p.postId === post.postId).length
+          : 0,
+        impressions: engagement?.impressions || 0,
+        engagement: engagement?.engagement || 0,
+      };
+    });
+
+    // one row for every platform of the campaign
+    const platforms = new Map<
+      string,
+      {
+        platform: string;
+        posts: number;
+        sent: number;
+        failed: number;
+        leads: number;
+        impressions: number;
+        engagement: number;
+      }
+    >();
+    for (const post of byPost) {
+      const row = platforms.get(post.provider) || {
+        platform: post.provider,
+        posts: 0,
+        sent: 0,
+        failed: 0,
+        leads: leads.filter((p) => p.utmSource === post.provider).length,
+        impressions: 0,
+        engagement: 0,
+      };
+      row.posts++;
+      if (post.scheduled && post.state === 'PUBLISHED') row.sent++;
+      if (post.scheduled && post.state === 'ERROR') row.failed++;
+      row.impressions += post.impressions;
+      row.engagement += post.engagement;
+      platforms.set(post.provider, row);
+    }
+
+    // sign-ups a day, in UK time, from the first day to a few days after the last
+    const first = new Date(`${start.toISOString().slice(0, 10)}T12:00:00Z`);
+    const daily = [...Array(campaign.days + TAIL_DAYS)].map((_, index) => {
+      const day = this.ukDay(new Date(first.getTime() + index * DAY));
+      return {
+        date: day,
+        leads: leads.filter((p) => this.ukDay(p.createdAt) === day).length,
+      };
+    });
+
+    // against a normal stretch: per day for sign-ups, per post for reach
+    const elapsed = Math.min(
+      campaign.days,
+      Math.max(
+        0,
+        Math.ceil((Math.min(now, end.getTime()) - start.getTime()) / DAY)
+      )
+    );
+    const baselinePerDay = baselineLeads / BASELINE_DAYS;
+    // every sign-up in the campaign days against every sign-up in a normal day,
+    // the ones this campaign's links brought are in totals.leads
+    const campaignPerDay = elapsed ? windowLeads / elapsed : null;
+    const measured = engagements.length;
+    const total = (key: 'engagement' | 'impressions') =>
+      engagements.reduce((all, p) => all + p[key], 0);
+    const perPost = (key: 'engagement' | 'impressions') =>
+      measured ? total(key) / measured : null;
+    const lift = (value: number | null, normal: number) =>
+      value !== null && normal > 0 ? value / normal - 1 : null;
+
+    const currencies = [
+      ...new Set(
+        sales.filter((p) => p.currency).map((p) => p.currency!.toUpperCase())
+      ),
+    ];
+
+    return {
+      campaign: {
+        id: campaign.id,
+        name: campaign.name,
+        slug: campaign.slug,
+        startDate: campaign.startDate,
+        days: campaign.days,
+        status: !postIds.length
+          ? 'NOT_SCHEDULED'
+          : now < start.getTime()
+          ? 'NOT_STARTED'
+          : now < end.getTime()
+          ? 'RUNNING'
+          : 'ENDED',
+      },
+      totals: {
+        posts: campaign.posts.length,
+        sent: byPost.filter((p) => p.scheduled && p.state === 'PUBLISHED').length,
+        failed: byPost.filter((p) => p.scheduled && p.state === 'ERROR').length,
+        leads: leads.length,
+        sales: sales.length,
+        salesValue: sales.reduce((all, p) => all + p.value, 0),
+        currencies,
+        impressions: total('impressions'),
+        engagement: total('engagement'),
+        measuredPosts: measured,
+      },
+      baseline: {
+        days: BASELINE_DAYS,
+        leadsPerDay: baselinePerDay,
+        campaignLeadsPerDay: campaignPerDay,
+        leadsLift: lift(campaignPerDay, baselinePerDay),
+        engagementPerPost: baseline.engagement,
+        campaignEngagementPerPost: perPost('engagement'),
+        engagementLift: lift(perPost('engagement'), baseline.engagement),
+        impressionsPerPost: baseline.impressions,
+        campaignImpressionsPerPost: perPost('impressions'),
+        baselinePosts: baseline.posts,
+      },
+      platforms: [...platforms.values()],
+      posts: byPost
+        .filter((p) => p.scheduled && (p.state === 'PUBLISHED' || p.leads))
+        .sort((a, b) => b.leads - a.leads || b.engagement - a.engagement)
+        .slice(0, 10),
+      daily,
+      tracking: {
+        // a sign-up is credited to its post only when the post link carries utm_content
+        utmEnabled,
+        unattributed: leads.filter((p) => !p.postId).length,
+      },
+    };
   }
 
   private async postOrFail(orgId: string, id: string) {

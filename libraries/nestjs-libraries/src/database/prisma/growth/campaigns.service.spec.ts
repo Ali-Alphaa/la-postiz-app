@@ -62,6 +62,7 @@ const build = (extra: Record<string, any> = {}) => {
     updatePost: jest.fn().mockResolvedValue({}),
     activateCampaign: jest.fn(),
     getCampaign: jest.fn(),
+    ...(extra.repo || {}),
   };
   const mix: any = {
     planSlots: jest.fn().mockReturnValue(slots(extra.slots ?? 12)),
@@ -261,6 +262,119 @@ describe('CampaignsService', () => {
     ]);
     expect(result.status).toBe('NEEDS_MEDIA');
     expect(result.note).toContain('at least one media');
+  });
+
+  describe('results', () => {
+    const row = (id: string, integrationId: string, provider: string, postId: string | null) => ({
+      id,
+      integrationId,
+      integration: integration(integrationId, provider),
+      publishAt: new Date('2026-11-16T12:00:00Z'),
+      pillar: 'rulebook',
+      content: `Post ${id}`,
+      postId,
+    });
+    const at = (iso: string) => new Date(iso);
+
+    const results = (over: Record<string, any> = {}) =>
+      build({
+        repo: {
+          getCampaign: jest.fn().mockResolvedValue({
+            id: 'c1',
+            name: 'Guide push',
+            slug: 'guide-push-ab12',
+            startDate: at('2026-11-16T00:00:00Z'),
+            days: 7,
+            posts: [
+              row('r1', 'x1', 'x', 'pa'),
+              row('r2', 'i1', 'instagram', 'pb'),
+              row('r3', 'x1', 'x', null),
+            ],
+          }),
+          getConversions: jest.fn().mockResolvedValue([
+            { type: 'lead', value: 0, currency: null, utmSource: 'x', postId: 'pa', createdAt: at('2026-11-16T12:05:00Z') },
+            { type: 'lead', value: 0, currency: null, utmSource: 'x', postId: 'pa', createdAt: at('2026-11-16T15:00:00Z') },
+            { type: 'lead', value: 0, currency: null, utmSource: 'x', postId: null, createdAt: at('2026-11-17T09:00:00Z') },
+            { type: 'lead', value: 0, currency: null, utmSource: 'instagram', postId: null, createdAt: at('2026-11-17T10:00:00Z') },
+            { type: 'sale', value: 50, currency: 'gbp', utmSource: 'x', postId: 'pa', createdAt: at('2026-11-17T11:00:00Z') },
+          ]),
+          getEngagements: jest.fn().mockResolvedValue([
+            { postId: 'pa', engagement: 40, impressions: 1000 },
+          ]),
+          getPostStates: jest.fn().mockResolvedValue([
+            { id: 'pa', state: 'PUBLISHED', releaseURL: 'https://x.com/a/1' },
+            { id: 'pb', state: 'QUEUE', releaseURL: null },
+          ]),
+          isUtmEnabled: jest.fn().mockResolvedValue(over.utm ?? true),
+          // 14 sign-ups of any kind in the 28 days before, 6 since it started
+          countLeads: jest
+            .fn()
+            .mockImplementation(async (_org: string, from: Date) =>
+              from.getTime() < at('2026-11-16T00:00:00Z').getTime() ? 14 : 6
+            ),
+          getBaselineEngagement: jest.fn().mockResolvedValue({
+            posts: 20,
+            engagement: 10,
+            impressions: 400,
+          }),
+        },
+      });
+
+    afterEach(() => jest.useRealTimers());
+
+    it('adds up sign-ups, reach and sales and compares them with a normal stretch', async () => {
+      // two days into a 7 day campaign
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-18T00:00:00Z'));
+      const { service } = results();
+      const result = await service.getResults('org', 'c1');
+
+      expect(result.campaign.status).toBe('RUNNING');
+      expect(result.totals).toMatchObject({
+        posts: 3,
+        sent: 1,
+        leads: 4,
+        sales: 1,
+        salesValue: 50,
+        currencies: ['GBP'],
+        impressions: 1000,
+        engagement: 40,
+      });
+      // 14 sign-ups in the 28 days before = 0.5 a day, 6 in 2 days = 3 a day
+      // (4 of them came through the campaign links)
+      expect(result.baseline.leadsPerDay).toBeCloseTo(0.5);
+      expect(result.baseline.campaignLeadsPerDay).toBe(3);
+      expect(result.baseline.leadsLift).toBeCloseTo(5);
+      // 40 engagement on the one measured post against 10 normally
+      expect(result.baseline.engagementLift).toBeCloseTo(3);
+
+      const x = result.platforms.find((p) => p.platform === 'x')!;
+      expect(x).toMatchObject({ posts: 2, sent: 1, leads: 3, impressions: 1000 });
+      const instagram = result.platforms.find((p) => p.platform === 'instagram')!;
+      expect(instagram).toMatchObject({ posts: 1, sent: 0, leads: 1 });
+
+      // only posts that went out or earned sign-ups are ranked, with their own leads
+      expect(result.posts).toHaveLength(1);
+      expect(result.posts[0]).toMatchObject({ provider: 'x', leads: 2 });
+      expect(result.tracking.unattributed).toBe(2);
+      expect(result.daily.slice(0, 2).map((p) => p.leads)).toEqual([2, 2]);
+    });
+
+    it('has no comparison before the campaign starts or without a normal stretch', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-10T00:00:00Z'));
+      const before = await results().service.getResults('org', 'c1');
+      expect(before.campaign.status).toBe('NOT_STARTED');
+      expect(before.baseline.campaignLeadsPerDay).toBeNull();
+      expect(before.baseline.leadsLift).toBeNull();
+    });
+
+    it('reports that utm tracking is off', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-18T00:00:00Z'));
+      const { tracking } = await results({ utm: false }).service.getResults(
+        'org',
+        'c1'
+      );
+      expect(tracking.utmEnabled).toBe(false);
+    });
   });
 
   it('refuses to approve a time that has passed and to edit an approved post', async () => {
