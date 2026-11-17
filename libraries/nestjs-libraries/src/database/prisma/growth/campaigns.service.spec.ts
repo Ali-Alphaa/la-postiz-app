@@ -358,6 +358,28 @@ describe('CampaignsService', () => {
     expect(codes('')).toContain('empty');
   });
 
+  it('counts a link as 23 characters on X so a tracked link does not make a post too long', () => {
+    const { service } = build();
+    const link =
+      'https://thesigmatrader.com/candlesticks?utm_source=x&utm_medium=social&utm_campaign=test-campaign-archive-me-y33o';
+    const withLink = `Free, 27 pages in plain English, no memorising.
+
+${'Read it with your journal open. '.repeat(6)}${link}`;
+    // long as raw text, short the way X counts it
+    expect(withLink.length).toBeGreaterThan(280);
+    expect(
+      service.flags(withLink, 'offer', 280, 'x').map((p) => p.code)
+    ).not.toContain('too_long');
+    // the same text is too long where a link counts in full
+    expect(
+      service.flags(withLink, 'offer', 280, 'instagram').map((p) => p.code)
+    ).toContain('too_long');
+    // plain text over the limit is still caught on X
+    expect(
+      service.flags('x'.repeat(300), 'rulebook', 280, 'x').map((p) => p.code)
+    ).toContain('too_long');
+  });
+
   it('blocks approving a post with a high severity flag', async () => {
     const { service, tools } = build({
       post: savedPost({ content: 'Guaranteed profits, risk free' }),
