@@ -1278,5 +1278,20 @@
   "campaign_results_post": "Post",
   "campaign_results_daily": "Sign-ups a day (UK time)",
   "campaign_view_posts": "Posts",
-  "campaign_view_results": "Results"
+  "campaign_view_results": "Results",
+  "campaign_playbook": "Playbook",
+  "campaign_playbook_7": "Lead magnet, 7 days",
+  "campaign_playbook_14": "Lead magnet, 14 days",
+  "campaign_playbook_14_hint": "A teaser week of value posts, then a push week that opens with the offer and ends with one calm last reminder.",
+  "campaign_playbook_7_hint": "A teaser, the offer at about the middle of the week and, on busy channels, a last reminder.",
+  "campaign_duplicated": "Claude drafted the new campaign, review each post",
+  "campaign_archived": "Campaign archived",
+  "campaign_unarchived": "Campaign restored",
+  "campaign_duplicate": "Run it again",
+  "campaign_unarchive": "Restore",
+  "campaign_archive": "Archive",
+  "campaign_duplicate_button": "Draft it again with Claude",
+  "campaign_duplicate_hint": "Same lead magnet, playbook and channels on the new date. Claude writes new posts, nothing is copied.",
+  "campaign_hide_archived": "Back to campaigns",
+  "campaign_show_archived": "Archived ({{count}})"
 }

@@ -62,10 +62,19 @@ const build = (extra: Record<string, any> = {}) => {
     updatePost: jest.fn().mockResolvedValue({}),
     activateCampaign: jest.fn(),
     getCampaign: jest.fn(),
+    setCampaignStatus: jest.fn().mockResolvedValue(true),
     ...(extra.repo || {}),
   };
   const mix: any = {
-    planSlots: jest.fn().mockReturnValue(slots(extra.slots ?? 12)),
+    planSlots: jest.fn().mockReturnValue(
+      extra.slotDays
+        ? extra.slotDays.map((day: number, i: number) => ({
+            day,
+            time: '12:00',
+            date: future(48 + i),
+          }))
+        : slots(extra.slots ?? 12)
+    ),
   };
   const tools: any = {
     bulkSchedule: jest
@@ -171,6 +180,136 @@ describe('CampaignsService', () => {
     // value posts never carry the link token
     expect(posts[1].content).not.toContain('{{link}}');
     expect(posts.filter((p: any) => /thesigmatrader/.test(p.content)).length).toBe(2);
+  });
+
+  describe('playbooks', () => {
+    // one post a day for 14 days
+    const days14 = [...Array(14).keys()];
+
+    it('the 14 day playbook warms up for a week and then pushes the offer', async () => {
+      const { service, repository, anthropic, mix } = build({ slotDays: days14 });
+      await service.createCampaign('org', {
+        ...body,
+        days: undefined,
+        playbook: 'lead_magnet_14',
+      } as any);
+
+      expect(mix.planSlots.mock.calls[0][2]).toBe(14);
+      const slots = anthropic.draftCampaign.mock.calls[0][1];
+      const roles = slots.map((p: any) => p.role);
+      expect(roles[0]).toBe('teaser');
+      // no offer in the first week
+      expect(roles.slice(0, 7)).not.toContain('offer');
+      expect(roles.slice(0, 7)).not.toContain('last');
+      // the second week starts with the offer and ends with the last reminder
+      expect(roles[7]).toBe('offer');
+      expect(roles[13]).toBe('last');
+      // at most 2 offer posts in a week
+      expect(roles.filter((p: string) => p === 'offer' || p === 'last')).toHaveLength(2);
+
+      const [, data] = repository.createCampaign.mock.calls[0];
+      expect(data).toMatchObject({ days: 14, playbook: 'lead_magnet_14' });
+    });
+
+    it('a request that only says 14 days is the 14 day playbook', async () => {
+      const { service, repository } = build({ slotDays: days14 });
+      await service.createCampaign('org', { ...body, days: 14 } as any);
+      expect(repository.createCampaign.mock.calls[0][1]).toMatchObject({
+        days: 14,
+        playbook: 'lead_magnet_14',
+      });
+    });
+
+    it('drafts a long campaign in batches and keeps every post', async () => {
+      const { service, repository, anthropic } = build({ slots: 50 });
+      await service.createCampaign('org', body as any);
+
+      expect(anthropic.draftCampaign).toHaveBeenCalledTimes(2);
+      expect(
+        anthropic.draftCampaign.mock.calls.map((p: any) => p[1].length)
+      ).toEqual([45, 5]);
+      expect(repository.createCampaign.mock.calls[0][2]).toHaveLength(50);
+    });
+  });
+
+  describe('archive and duplicate', () => {
+    const existing = {
+      id: 'c1',
+      name: 'Guide push',
+      goal: 'More sign-ups',
+      leadMagnetId: 'm1',
+      playbook: 'lead_magnet_14',
+      tone: 'calm',
+      notes: 'no charts',
+      status: 'ACTIVE',
+      posts: [
+        { integrationId: 'x1', status: 'APPROVED' },
+        { integrationId: 'x1', status: 'DRAFT' },
+      ],
+    };
+
+    it('archives a campaign and says so when it is not found', async () => {
+      const { service, repository } = build();
+      expect(await service.archiveCampaign('org', 'c1')).toEqual({
+        status: 'ARCHIVED',
+      });
+      expect(repository.setCampaignStatus).toHaveBeenCalledWith(
+        'org',
+        'c1',
+        'ARCHIVED'
+      );
+
+      const missing = build({
+        repo: { setCampaignStatus: jest.fn().mockResolvedValue(false) },
+      });
+      await expect(missing.service.archiveCampaign('org', 'x')).rejects.toThrow(
+        'Campaign not found'
+      );
+    });
+
+    it('brings a campaign back as active when it has approved posts, otherwise as a draft', async () => {
+      const active = build({
+        repo: { getCampaign: jest.fn().mockResolvedValue(existing) },
+      });
+      expect(await active.service.unarchiveCampaign('org', 'c1')).toEqual({
+        status: 'ACTIVE',
+      });
+      const draft = build({
+        repo: {
+          getCampaign: jest.fn().mockResolvedValue({
+            ...existing,
+            posts: [{ integrationId: 'x1', status: 'DRAFT' }],
+          }),
+        },
+      });
+      expect(await draft.service.unarchiveCampaign('org', 'c1')).toEqual({
+        status: 'DRAFT',
+      });
+    });
+
+    it('duplicates the brief, playbook and channels on a new start date', async () => {
+      const { service, repository, anthropic } = build({
+        slotDays: [...Array(14).keys()],
+        repo: { getCampaign: jest.fn().mockResolvedValue(existing) },
+      });
+      await service.duplicateCampaign('org', 'c1', {
+        startDate: '2999-02-01',
+      });
+
+      const [, data] = repository.createCampaign.mock.calls[0];
+      expect(data).toMatchObject({
+        name: 'Guide push (again)',
+        goal: 'More sign-ups',
+        playbook: 'lead_magnet_14',
+        days: 14,
+        tone: 'calm',
+        notes: 'no charts',
+      });
+      expect(data.startDate.toISOString()).toBe('2999-02-01T00:00:00.000Z');
+      expect(data.slug).not.toBe('guide-push');
+      // the posts are written again, not copied
+      expect(anthropic.draftCampaign).toHaveBeenCalled();
+    });
   });
 
   it('asks channels that need media for a picture or video idea', async () => {

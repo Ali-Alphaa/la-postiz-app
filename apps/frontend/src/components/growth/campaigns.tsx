@@ -78,7 +78,7 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
     goal: '',
     leadMagnetId: '',
     startDate: ukToday(1),
-    days: '7',
+    playbook: 'lead_magnet_7',
     tone: '',
     notes: '',
   });
@@ -101,7 +101,7 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
         goal: values.goal || undefined,
         leadMagnetId: values.leadMagnetId || available[0]?.id,
         startDate: values.startDate,
-        days: +values.days,
+        playbook: values.playbook,
         integrationIds: channels,
         tone: values.tone || undefined,
         notes: values.notes || undefined,
@@ -167,19 +167,34 @@ const CampaignForm: FC<{ onCreated: (id: string) => void }> = ({
             onChange={(e) => set('startDate', e.target.value)}
           />
         </div>
-        <div className="w-[200px] mobile:w-full">
+        <div className="w-[320px] mobile:w-full">
           <Select
-            label={t('campaign_days', 'Length')}
-            name="campaignDays"
+            label={t('campaign_playbook', 'Playbook')}
+            name="campaignPlaybook"
             disableForm={true}
             hideErrors={true}
-            value={values.days}
-            onChange={(e) => set('days', e.target.value)}
+            value={values.playbook}
+            onChange={(e) => set('playbook', e.target.value)}
           >
-            <option value="7">{t('campaign_7_days', '7 days')}</option>
-            <option value="14">{t('campaign_14_days', '14 days')}</option>
+            <option value="lead_magnet_7">
+              {t('campaign_playbook_7', 'Lead magnet, 7 days')}
+            </option>
+            <option value="lead_magnet_14">
+              {t('campaign_playbook_14', 'Lead magnet, 14 days')}
+            </option>
           </Select>
         </div>
+      </div>
+      <div className="text-[12px] text-newTextColor/60 -mt-[6px]">
+        {values.playbook === 'lead_magnet_14'
+          ? t(
+              'campaign_playbook_14_hint',
+              'A teaser week of value posts, then a push week that opens with the offer and ends with one calm last reminder.'
+            )
+          : t(
+              'campaign_playbook_7_hint',
+              'A teaser, the offer at about the middle of the week and, on busy channels, a last reminder.'
+            )}
       </div>
       <div className="flex flex-col gap-[6px]">
         <div className="text-[14px]">
@@ -707,19 +722,72 @@ const Results: FC<{ id: string }> = ({ id }) => {
   );
 };
 
-const CampaignDetail: FC<{ id: string; onBack: () => void }> = ({
-  id,
-  onBack,
-}) => {
+const CampaignDetail: FC<{
+  id: string;
+  onBack: () => void;
+  onDuplicated: (id: string) => void;
+}> = ({ id, onBack, onDuplicated }) => {
   const t = useT();
+  const fetch = useFetch();
+  const toaster = useToaster();
   const { data, mutate } = useCampaign(id);
   const { mutate: reloadList } = useCampaigns();
   const [view, setView] = useState<'posts' | 'results'>('posts');
+  const [duplicating, setDuplicating] = useState(false);
+  const [startDate, setStartDate] = useState(ukToday(1));
+  const [working, setWorking] = useState('');
 
   const reload = useCallback(() => {
     mutate();
     reloadList();
   }, [mutate, reloadList]);
+
+  const act = useCallback(
+    async (kind: 'archive' | 'unarchive' | 'duplicate') => {
+      setWorking(kind);
+      const response = await fetch(`/campaigns/${id}/${kind}`, {
+        method: 'POST',
+        ...(kind === 'duplicate' ? { body: JSON.stringify({ startDate }) } : {}),
+      });
+      setWorking('');
+      if (!response.ok) {
+        toaster.show(
+          await errorMessage(
+            response,
+            t('something_went_wrong', 'Something went wrong')
+          ),
+          'warning'
+        );
+        return;
+      }
+      const result = await response.json();
+      if (kind === 'duplicate') {
+        toaster.show(
+          t(
+            'campaign_duplicated',
+            'Claude drafted the new campaign, review each post'
+          ),
+          'success'
+        );
+        setDuplicating(false);
+        setView('posts');
+        onDuplicated(result.id);
+        return;
+      }
+      toaster.show(
+        kind === 'archive'
+          ? t('campaign_archived', 'Campaign archived')
+          : t('campaign_unarchived', 'Campaign restored'),
+        'success'
+      );
+      if (kind === 'archive') {
+        onBack();
+        return;
+      }
+      reload();
+    },
+    [id, startDate, reload]
+  );
 
   // the posts of a day together, in UK time
   const days = useMemo(() => {
@@ -763,8 +831,57 @@ const CampaignDetail: FC<{ id: string; onBack: () => void }> = ({
           >
             {t('campaign_view_results', 'Results')}
           </Button>
+          <Button
+            secondary={true}
+            onClick={() => setDuplicating(!duplicating)}
+          >
+            {t('campaign_duplicate', 'Run it again')}
+          </Button>
+          {data.status === 'ARCHIVED' ? (
+            <Button
+              secondary={true}
+              onClick={() => act('unarchive')}
+              loading={working === 'unarchive'}
+            >
+              {t('campaign_unarchive', 'Restore')}
+            </Button>
+          ) : (
+            <Button
+              secondary={true}
+              onClick={() => act('archive')}
+              loading={working === 'archive'}
+            >
+              {t('campaign_archive', 'Archive')}
+            </Button>
+          )}
         </div>
       </div>
+      {duplicating && (
+        <GrowthCard className="flex gap-[12px] items-end flex-wrap">
+          <div className="w-[200px] mobile:w-full">
+            <Input
+              label={t('campaign_start', 'Start date (UK)')}
+              name="duplicateStart"
+              type="date"
+              disableForm={true}
+              value={startDate}
+              onChange={(e) => e.target.value && setStartDate(e.target.value)}
+            />
+          </div>
+          <Button
+            onClick={() => act('duplicate')}
+            loading={working === 'duplicate'}
+          >
+            {t('campaign_duplicate_button', 'Draft it again with Claude')}
+          </Button>
+          <div className="text-[12px] text-newTextColor/60 basis-full">
+            {t(
+              'campaign_duplicate_hint',
+              'Same lead magnet, playbook and channels on the new date. Claude writes new posts, nothing is copied.'
+            )}
+          </div>
+        </GrowthCard>
+      )}
       {view === 'results' && <Results id={id} />}
       {(view === 'posts' ? days : []).map(([day, posts]) => (
         <div key={day} className="flex flex-col gap-[10px]">
@@ -790,6 +907,13 @@ export const Campaigns: FC = () => {
   const { data, mutate } = useCampaigns();
   const [openId, setOpenId] = useState('');
   const [adding, setAdding] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const archivedCount = (data || []).filter(
+    (p: any) => p.status === 'ARCHIVED'
+  ).length;
+  const visible = (data || []).filter((p: any) =>
+    showArchived ? p.status === 'ARCHIVED' : p.status !== 'ARCHIVED'
+  );
 
   return (
     <GrowthSection
@@ -800,10 +924,22 @@ export const Campaigns: FC = () => {
       )}
     >
       {!openId && !adding && (
-        <div>
+        <div className="flex gap-[8px] flex-wrap">
           <Button onClick={() => setAdding(true)}>
             {t('campaign_new', 'New campaign')}
           </Button>
+          {(!!archivedCount || showArchived) && (
+            <Button
+              secondary={true}
+              onClick={() => setShowArchived(!showArchived)}
+            >
+              {showArchived
+                ? t('campaign_hide_archived', 'Back to campaigns')
+                : t('campaign_show_archived', 'Archived ({{count}})', {
+                    count: archivedCount,
+                  })}
+            </Button>
+          )}
         </div>
       )}
 
@@ -824,17 +960,21 @@ export const Campaigns: FC = () => {
             setOpenId('');
             mutate();
           }}
+          onDuplicated={(newId) => {
+            setOpenId(newId);
+            mutate();
+          }}
         />
       )}
 
       {!openId && !adding && (
         <div className="flex flex-col gap-[10px]">
-          {!!data && !data.length && (
+          {!!data && !visible.length && (
             <GrowthCard className="text-[14px] text-newTextColor/60">
               {t('campaigns_none', 'No campaigns yet')}
             </GrowthCard>
           )}
-          {(data || []).map((campaign: any) => (
+          {visible.map((campaign: any) => (
             <GrowthCard
               key={campaign.id}
               className="flex gap-[12px] items-center flex-wrap"
@@ -842,7 +982,10 @@ export const Campaigns: FC = () => {
               <div className="flex-1 min-w-[200px]">
                 <div className="text-[15px] font-semibold">{campaign.name}</div>
                 <div className="text-[13px] text-newTextColor/60">
-                  {campaign.total} {t('posts', 'posts')} ·{' '}
+                  {campaign.playbook === 'lead_magnet_14'
+                    ? t('campaign_playbook_14', 'Lead magnet, 14 days')
+                    : t('campaign_playbook_7', 'Lead magnet, 7 days')}{' '}
+                  · {campaign.total} {t('posts', 'posts')} ·{' '}
                   {campaign.counts.APPROVED || 0}{' '}
                   {t('campaign_scheduled_count', 'scheduled')} ·{' '}
                   {campaign.counts.DRAFT || 0}{' '}

@@ -17,6 +17,7 @@ import {
 import { CampaignsService } from '@gitroom/nestjs-libraries/database/prisma/growth/campaigns.service';
 import {
   CampaignDto,
+  CampaignDuplicateDto,
   CampaignPostDto,
 } from '@gitroom/nestjs-libraries/dtos/growth/campaign.dto';
 
@@ -53,6 +54,32 @@ export class CampaignsController {
     @Param('id') id: string
   ) {
     return this._campaignsService.getResults(org.id, id);
+  }
+
+  @Post('/:id/archive')
+  archiveCampaign(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._campaignsService.archiveCampaign(org.id, id);
+  }
+
+  @Post('/:id/unarchive')
+  unarchiveCampaign(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string
+  ) {
+    return this._campaignsService.unarchiveCampaign(org.id, id);
+  }
+
+  @Post('/:id/duplicate')
+  @CheckPolicies([AuthorizationActions.Create, Sections.AI])
+  duplicateCampaign(
+    @GetOrgFromRequest() org: Organization,
+    @Param('id') id: string,
+    @Body() body: CampaignDuplicateDto
+  ) {
+    return this._campaignsService.duplicateCampaign(org.id, id, body);
   }
 
   @Put('/posts/:id')
