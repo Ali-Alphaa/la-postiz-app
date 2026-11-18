@@ -77,6 +77,8 @@ export class TikTokDto {
   })
   title: string;
 
+  // TikTok wants the user to choose it, an upload to the inbox has none
+  @ValidateIf((p) => p.content_posting_method !== 'UPLOAD')
   @IsIn([
     'PUBLIC_TO_EVERYONE',
     'MUTUAL_FOLLOW_FRIENDS',

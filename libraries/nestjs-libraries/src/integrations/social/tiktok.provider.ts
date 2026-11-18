@@ -53,9 +53,30 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
   }
 
   override async checkValidity(
-    items: Array<ValidityMedia[]>
+    items: Array<ValidityMedia[]>,
+    settings?: any
   ): Promise<string | true> {
     const [firstItems] = items ?? [];
+
+    // TikTok's rules for a direct post, the upload to the inbox has none
+    if (settings && settings.content_posting_method !== 'UPLOAD') {
+      if (settings.creator_error) {
+        return settings.creator_error;
+      }
+      if (settings.disclose && !settings.brand_organic_toggle && !settings.brand_content_toggle) {
+        return 'You need to indicate if your content promotes yourself, a third party, or both.';
+      }
+      if (settings.brand_content_toggle && settings.privacy_level === 'SELF_ONLY') {
+        return 'Branded content visibility cannot be set to private.';
+      }
+      if (
+        settings.max_video_seconds > 0 &&
+        settings.video_seconds > settings.max_video_seconds
+      ) {
+        return `The video is ${Math.ceil(settings.video_seconds)} seconds, TikTok allows ${settings.max_video_seconds} seconds for this account`;
+      }
+    }
+
     if ((firstItems?.length ?? 0) === 0) {
       return 'No video / images selected';
     }
@@ -418,11 +439,13 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
-  // The audiences this account may post to. TikTok only allows an app that has
-  // not passed its audit to post privately, so the dashboard offers just these.
+  // What the account may do right now, TikTok asks every app to read this when
+  // it shows its post page: the nickname, the audiences (an app that has not
+  // passed its audit can only post privately), the interactions the user has
+  // switched off, the longest video and whether another post is allowed.
   @DashboardFunction()
-  async privacyOptions(accessToken: string): Promise<string[]> {
-    const { data } = await (
+  async creatorInfo(accessToken: string) {
+    const { data, error } = await (
       await fetch(
         'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
         {
@@ -435,7 +458,19 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
       )
     ).json();
 
-    return data?.privacy_level_options || [];
+    return {
+      nickname: data?.creator_nickname || '',
+      username: data?.creator_username || '',
+      privacyOptions: (data?.privacy_level_options || []) as string[],
+      commentDisabled: !!data?.comment_disabled,
+      duetDisabled: !!data?.duet_disabled,
+      stitchDisabled: !!data?.stitch_disabled,
+      maxVideoSeconds: (data?.max_video_post_duration_sec || 0) as number,
+      error:
+        error?.code && error.code !== 'ok'
+          ? error.message || error.code
+          : '',
+    };
   }
 
   async maxVideoLength(accessToken: string) {
