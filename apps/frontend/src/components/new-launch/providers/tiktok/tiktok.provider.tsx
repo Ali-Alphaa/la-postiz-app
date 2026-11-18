@@ -2,7 +2,9 @@
 
 import {
   FC,
+  useEffect,
   useMemo,
+  useState,
 } from 'react';
 import {
   PostComment,
@@ -15,6 +17,7 @@ import { Checkbox } from '@gitroom/react/form/checkbox';
 import clsx from 'clsx';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 import { useIntegration } from '@gitroom/frontend/components/launches/helpers/use.integration';
+import { useCustomProviderFunction } from '@gitroom/frontend/components/launches/helpers/use.custom.provider.function';
 import { Input } from '@gitroom/react/form/input';
 import { TiktokPreview } from '@gitroom/frontend/components/new-launch/providers/tiktok/tiktok.preview';
 import { TikTokMusicSelector } from '@gitroom/frontend/components/new-launch/providers/tiktok/tiktok.music';
@@ -23,7 +26,9 @@ import { TikTokLocationSelector } from '@gitroom/frontend/components/new-launch/
 const TikTokSettings: FC<{
   values?: any;
 }> = (props) => {
-  const { watch, register } = useSettings();
+  const { watch, register, getValues, setValue } = useSettings();
+  const customFunc = useCustomProviderFunction();
+  const [allowedPrivacy, setAllowedPrivacy] = useState<string[]>([]);
   const { value, integration } = useIntegration();
   const t = useT();
 
@@ -65,7 +70,7 @@ const TikTokSettings: FC<{
     );
   }, [hasMedia, isUploadMode, isVideo, t]);
 
-  const privacyLevel = [
+  const allPrivacyLevels = [
     {
       value: 'PUBLIC_TO_EVERYONE',
       label: t('public_to_everyone', 'Public to everyone'),
@@ -83,6 +88,25 @@ const TikTokSettings: FC<{
       label: t('self_only', 'Self only'),
     },
   ];
+  // TikTok says which audiences this account may post to, a private account
+  // or an app that is not audited can only post to "Self only"
+  const privacyLevel = allowedPrivacy.length
+    ? allPrivacyLevels.filter((p) => allowedPrivacy.includes(p.value))
+    : allPrivacyLevels;
+  useEffect(() => {
+    customFunc
+      .get('privacyOptions')
+      .then((options) => {
+        if (!Array.isArray(options) || !options.length) {
+          return;
+        }
+        setAllowedPrivacy(options);
+        if (!options.includes(getValues('privacy_level'))) {
+          setValue('privacy_level', options[options.length - 1]);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const contentPostingMethod = [
     {
       value: 'DIRECT_POST',

@@ -15,6 +15,7 @@ import {
   SocialAbstract,
   ValidityMedia,
 } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 import { TikTokDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/tiktok.dto';
 import { timer } from '@gitroom/helpers/utils/timer';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
@@ -415,6 +416,26 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
       picture: avatar_url,
       username: username,
     };
+  }
+
+  // The audiences this account may post to. TikTok only allows an app that has
+  // not passed its audit to post privately, so the dashboard offers just these.
+  @DashboardFunction()
+  async privacyOptions(accessToken: string): Promise<string[]> {
+    const { data } = await (
+      await fetch(
+        'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+    ).json();
+
+    return data?.privacy_level_options || [];
   }
 
   async maxVideoLength(accessToken: string) {
