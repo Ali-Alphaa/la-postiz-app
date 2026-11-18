@@ -60,6 +60,12 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
 
     // TikTok's rules for a direct post, the upload to the inbox has none
     if (settings && settings.content_posting_method !== 'UPLOAD') {
+      if (
+        settings.privacy_level &&
+        this.allowedPrivacy([settings.privacy_level]).length === 0
+      ) {
+        return 'TikTok only lets this app post privately until it is approved, choose Self only.';
+      }
       if (settings.creator_error) {
         return settings.creator_error;
       }
@@ -439,6 +445,15 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     };
   }
 
+  // TikTok lists every audience for an app that has not passed its audit, but
+  // only lets it post privately. Set TIKTOK_APP_AUDITED=false until the audit
+  // is passed so the posts are not refused at publish time.
+  private allowedPrivacy(options: string[]) {
+    return process.env.TIKTOK_APP_AUDITED === 'false'
+      ? options.filter((p) => p === 'SELF_ONLY')
+      : options;
+  }
+
   // What the account may do right now, TikTok asks every app to read this when
   // it shows its post page: the nickname, the audiences (an app that has not
   // passed its audit can only post privately), the interactions the user has
@@ -461,7 +476,9 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
     return {
       nickname: data?.creator_nickname || '',
       username: data?.creator_username || '',
-      privacyOptions: (data?.privacy_level_options || []) as string[],
+      privacyOptions: this.allowedPrivacy(
+        (data?.privacy_level_options || []) as string[]
+      ),
       commentDisabled: !!data?.comment_disabled,
       duetDisabled: !!data?.duet_disabled,
       stitchDisabled: !!data?.stitch_disabled,
