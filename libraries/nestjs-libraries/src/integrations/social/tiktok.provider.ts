@@ -15,6 +15,7 @@ import {
   SocialAbstract,
   ValidityMedia,
 } from '@gitroom/nestjs-libraries/integrations/social.abstract';
+import { DashboardFunction } from '@gitroom/nestjs-libraries/integrations/dashboard.function.decorator';
 import { TikTokDto } from '@gitroom/nestjs-libraries/dtos/posts/providers-settings/tiktok.dto';
 import { timer } from '@gitroom/helpers/utils/timer';
 import { hasExtension } from '@gitroom/helpers/utils/has.extension';
@@ -52,9 +53,36 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
   }
 
   override async checkValidity(
-    items: Array<ValidityMedia[]>
+    items: Array<ValidityMedia[]>,
+    settings?: any
   ): Promise<string | true> {
     const [firstItems] = items ?? [];
+
+    // TikTok's rules for a direct post, the upload to the inbox has none
+    if (settings && settings.content_posting_method !== 'UPLOAD') {
+      if (
+        settings.privacy_level &&
+        this.allowedPrivacy([settings.privacy_level]).length === 0
+      ) {
+        return 'TikTok only lets this app post privately until it is approved, choose Self only.';
+      }
+      if (settings.creator_error) {
+        return settings.creator_error;
+      }
+      if (settings.disclose && !settings.brand_organic_toggle && !settings.brand_content_toggle) {
+        return 'You need to indicate if your content promotes yourself, a third party, or both.';
+      }
+      if (settings.brand_content_toggle && settings.privacy_level === 'SELF_ONLY') {
+        return 'Branded content visibility cannot be set to private.';
+      }
+      if (
+        settings.max_video_seconds > 0 &&
+        settings.video_seconds > settings.max_video_seconds
+      ) {
+        return `The video is ${Math.ceil(settings.video_seconds)} seconds, TikTok allows ${settings.max_video_seconds} seconds for this account`;
+      }
+    }
+
     if ((firstItems?.length ?? 0) === 0) {
       return 'No video / images selected';
     }
@@ -414,6 +442,51 @@ export class TiktokProvider extends SocialAbstract implements SocialProvider {
       expiresIn: dayjs().add(23, 'hours').unix() - dayjs().unix(),
       picture: avatar_url,
       username: username,
+    };
+  }
+
+  // TikTok lists every audience for an app that has not passed its audit, but
+  // only lets it post privately. Set TIKTOK_APP_AUDITED=false until the audit
+  // is passed so the posts are not refused at publish time.
+  private allowedPrivacy(options: string[]) {
+    return process.env.TIKTOK_APP_AUDITED === 'false'
+      ? options.filter((p) => p === 'SELF_ONLY')
+      : options;
+  }
+
+  // What the account may do right now, TikTok asks every app to read this when
+  // it shows its post page: the nickname, the audiences (an app that has not
+  // passed its audit can only post privately), the interactions the user has
+  // switched off, the longest video and whether another post is allowed.
+  @DashboardFunction()
+  async creatorInfo(accessToken: string) {
+    const { data, error } = await (
+      await fetch(
+        'https://open.tiktokapis.com/v2/post/publish/creator_info/query/',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      )
+    ).json();
+
+    return {
+      nickname: data?.creator_nickname || '',
+      username: data?.creator_username || '',
+      privacyOptions: this.allowedPrivacy(
+        (data?.privacy_level_options || []) as string[]
+      ),
+      commentDisabled: !!data?.comment_disabled,
+      duetDisabled: !!data?.duet_disabled,
+      stitchDisabled: !!data?.stitch_disabled,
+      maxVideoSeconds: (data?.max_video_post_duration_sec || 0) as number,
+      error:
+        error?.code && error.code !== 'ok'
+          ? error.message || error.code
+          : '',
     };
   }
 

@@ -381,7 +381,13 @@ export class FacebookProvider extends SocialAbstract implements SocialProvider {
     const permissions = data
       .filter((d: any) => d.status === 'granted')
       .map((p: any) => p.permission);
-    this.checkScopes(this.scopes, permissions);
+    // pages_manage_engagement is optional: Meta rejects login configurations that
+    // request it for apps that are not yet approved for it. Without it only
+    // comment replies are unavailable, posting and insights still work.
+    this.checkScopes(
+      this.scopes.filter((scope) => scope !== 'pages_manage_engagement'),
+      permissions
+    );
 
     const { id, name, picture } = await (
       await fetch(
