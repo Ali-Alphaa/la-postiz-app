@@ -32,7 +32,8 @@ const AI_TELLS = `Sound like a person, not a template:
 - Never answer your own question ("The result? Fewer revenge trades.") and never use colon reveals ("The best part: ...").
 - No stock openers ("In today's markets", "Here's the thing", "Whether you're X or Y", "Unlock", "Take it to the next level") and no seamless, powerful, robust or game-changer.
 - No em dashes. Use a full stop or a comma.
-- At most one fragment and one list of three per post, and vary the sentence length.`;
+- At most one fragment and one list of three per post, and vary the sentence length.
+- Do not give most posts the same shape. Mixing in a plain two-line statement is fine, but not as the default: use full sentences, a short story, a question or a numbered rule as well.`;
 
 const COPY_CRAFT = `Craft rules for every post (apply them silently, never mention them):
 - One post, one idea. Decide the single point and what the reader gets from it before the first line, then write the hook last.
@@ -44,7 +45,7 @@ const COPY_CRAFT = `Craft rules for every post (apply them silently, never menti
 - End with one thing. Value and proof posts close with a short call to conversation that is easy to answer (a question, or a rule to disagree with). Offer posts close with one soft call to action, a verb plus what they get ("Get the free rulebook"), never "Learn more" or "Click here".
 ${AI_TELLS}`;
 
-const OFFER_CRAFT = `Offer posts follow four short steps: (1) the hook names the reader's problem, (2) one line makes the free resource wanted by what it helps them do or stop doing, (3) one line builds trust with something true about what it contains, taken from the brief only, (4) the call to action says what they get, that it is free and that it needs an email address. Across the campaign alternate desire posts and trust posts instead of repeating one. Create urgency only from a real deadline or limit the brief states, otherwise none.`;
+const OFFER_CRAFT = `Offer posts follow four short steps: (1) the hook names the reader's problem, (2) one line makes the free resource wanted by what it helps them do or stop doing, (3) one line builds trust with something true about what it contains, taken from the brief only, (4) the call to action says what they get, that it is free and that it needs an email address. An offer post must still fit its slot's maxLength: the link counts as 23 characters, so aim for at most 240 characters of text, and when the four steps do not fit, drop step 3 first, then shorten step 2. Across the campaign alternate desire posts and trust posts instead of repeating one. Create urgency only from a real deadline or limit the brief states, otherwise none.`;
 
 const AnalysisPrompt = z.object({
   tweets: z.array(
