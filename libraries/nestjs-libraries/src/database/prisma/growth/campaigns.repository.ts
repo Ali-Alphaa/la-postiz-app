@@ -8,6 +8,7 @@ const POST_SELECT = {
   pillar: true,
   mediaIdea: true,
   content: true,
+  variations: true,
   status: true,
   postId: true,
   note: true,
@@ -92,6 +93,7 @@ export class CampaignsRepository {
       pillar: string;
       mediaIdea: string | null;
       content: string;
+      variations?: string[];
       sortOrder: number;
     }>
   ) {

@@ -377,6 +377,26 @@ const PostCard: FC<{ post: any; reload: () => void }> = ({ post, reload }) => {
           {post.mediaIdea}
         </div>
       )}
+      {editable && post.variations?.length > 1 && (
+        <div className="flex gap-[8px] items-center flex-wrap">
+          <span className="text-[12px] text-newTextColor/60">
+            {t('campaign_layouts', 'Layout')}
+          </span>
+          {post.variations.map((version: string, index: number) => (
+            <button
+              key={index}
+              type="button"
+              onClick={() => setContent(version)}
+              className={clsx(
+                'px-[10px] py-[2px] rounded-[6px] text-[12px] border border-newTableBorder',
+                content === version && 'bg-newBgColor font-semibold'
+              )}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+      )}
       <Textarea
         label={t('campaign_post_text', 'Post text')}
         name={`content-${post.id}`}

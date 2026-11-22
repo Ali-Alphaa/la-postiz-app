@@ -26,13 +26,13 @@ const NICHE =
 // (hook, payoff, call to conversation). It never adds facts: the no invention
 // and compliance rules of each prompt still win.
 const AI_TELLS = `Sound like a person, not a template:
-- Never write contrast reveals ("It's not X, it's Y", "Not because X. Because Y."). State Y and the reason.
+- Never write the lazy contrast reveal ("It's not X, it's Y", "Not because X. Because Y."). State Y and the reason. A real compare or contrast with two concrete subjects is fine.
 - Never list negations ("No signals, no hype, no hindsight"). Say what does happen.
 - End a sentence at its claim. No trailing clauses that pile on extra benefits.
 - Never answer your own question ("The result? Fewer revenge trades.") and never use colon reveals ("The best part: ...").
 - No stock openers ("In today's markets", "Here's the thing", "Whether you're X or Y", "Unlock", "Take it to the next level") and no seamless, powerful, robust or game-changer.
 - No em dashes. Use a full stop or a comma.
-- At most one fragment and one list of three per post, and vary the sentence length.
+- At most one fragment and one list of three per post (a list layout may be longer), and vary the sentence length.
 - Do not give most posts the same shape. Mixing in a plain two-line statement is fine, but not as the default: use full sentences, a short story, a question or a numbered rule as well.`;
 
 const COPY_CRAFT = `Craft rules for every post (apply them silently, never mention them):
@@ -42,11 +42,25 @@ const COPY_CRAFT = `Craft rules for every post (apply them silently, never menti
 - Clear beats clever. Plain words, active voice, one idea per sentence, no jargon an outsider would not know. Concrete detail beats adjectives: say what the rule is, not that it is powerful.
 - So what test: after each claim the reader knows why it matters to their trading or their business.
 - Proof is process, never outcome: a rule, a checklist item, a journalling step, a review habit. Never invent a person, quote, number or result.
-- End with one thing. Value and proof posts close with a short call to conversation that is easy to answer (a question, or a rule to disagree with). Offer posts close with one soft call to action, a verb plus what they get ("Get the free rulebook"), never "Learn more" or "Click here".
-- Be concise. Aim for 100 to 200 characters per post (a thread post or a longer format may use more). Cut every word that does not carry the point: no warm-up, no setup sentence, no recap of what you just said, no hedging words (just, really, maybe, kind of).
+- End with one thing. About half of the value and proof posts close with a short question that is easy to answer, the other half close with a statement finisher that could stand alone as a post. Never put a question on every post. Offer posts close with one soft call to action, a verb plus what they get ("Get the free rulebook"), never "Learn more" or "Click here".
+- Be concise. Aim for 100 to 200 characters per post (a list, compare or thread post may use more). Cut every word that does not carry the point: no warm-up, no setup sentence, no recap of what you just said, no hedging words (just, really, maybe, kind of).
 - Be divisive. Value posts take a side: one clear, arguable opinion about a trading habit, myth or piece of common advice that a reasonable trader could disagree with, stated flatly with its reason ("Most traders don't need another indicator. They need a rule they obey."). Strong stance, not a neutral tip. Aim it at ideas, habits and common advice, never at people, groups or firms: no insults, no shaming anyone who lost money, no ragebait, no false controversy. An opinion never promises or implies profit, a win rate or a result, and it never tells anyone to take a trade.
 - The creator's own voice (vocabulary and attitude) wins on word choice. These two rules decide length and stance.
 ${AI_TELLS}`;
+
+// The visual structure of X posts, from the Create 24/7 guide: hook, body and
+// finisher with blank lines, list and compare layouts, about half of the posts
+// ending on a question. The guide's fake statistic and fake social proof hooks
+// are left out on purpose.
+const X_STYLE = `X post layouts (apply them silently to X posts):
+- Put a blank line between the hook, the body and the finisher. One short sentence per line. Write to "you", in simple words.
+- Layouts: classic (hook, body, finisher), list (hook, 5 to 9 short lines sorted shortest to longest with dashes or numbers and no emoji bullets, finisher), one-liner (one sharp idea, optionally split over two lines), compare (two subjects with three dash lines each, finisher), repetition (3 to 7 lines that repeat their opening words with a small change, then a finisher).
+- Hook forms: a command (Stop... or Don't...), a surprising or unpopular statement, a question, the benefit first, a narrow group named, or an incomplete thought. Use digits for numbers. Never invent a statistic, a study or social proof for a hook.
+- The finisher closes the idea in one line.
+- Question posts are either a pure question with no opinion in it (so people answer) or a stance followed by a question. A question is original and easy to answer in one line, never "thoughts?".
+- Repetition and a real compare or contrast appear in at most one post in three.
+- Personal story posts use only real material from the brief or the source. If there is none, write only "[NEED: your real story about <topic in a few words>]". Never invent a story.
+- Lists and compare posts may use the full length limit, other layouts stay around 100 to 200 characters.`;
 
 const OFFER_CRAFT = `Offer posts follow four short steps: (1) the hook names the reader's problem, (2) one line makes the free resource wanted by what it helps them do or stop doing, (3) one line builds trust with something true about what it contains, taken from the brief only, (4) the call to action says what they get, that it is free and that it needs an email address. An offer post must still fit its slot's maxLength: the link counts as 23 characters, so aim for about 200 characters of text and never more than 240, and when the four steps do not fit, drop step 3 first, then shorten step 2. Across the campaign alternate desire posts and trust posts instead of repeating one. Create urgency only from a real deadline or limit the brief states, otherwise none.`;
 
@@ -84,6 +98,11 @@ const CampaignDraftPrompt = z.object({
       mediaIdea: z
         .string()
         .describe('What the picture or video shows, empty for a text only channel'),
+      variations: z
+        .array(z.string())
+        .describe(
+          'For an X slot exactly 2 more versions of the same post in other layouts, empty for any other platform'
+        ),
     })
   ),
 });
@@ -213,6 +232,8 @@ export interface CampaignSlot {
   day: number;
   role: string;
   pillar: string;
+  // X slots only: how the post closes, statement, question_pure or question_stance
+  closing?: string;
 }
 
 // What Claude is told about the business of a campaign. Trading is the default.
@@ -430,6 +451,9 @@ ${profile.rules.join('\n')}
 - TikTok slots: the caption is at most 150 characters with at most 3 hashtags, and the mediaIdea holds the whole 20 to 45 second video script: a hook for the first 3 seconds, three short beats, and the call to action.
 ${COPY_CRAFT}
 ${OFFER_CRAFT}
+${X_STYLE}
+- X slots carry a closing: statement (the finisher is a statement, no question), question_pure (the post is a question with no opinion in it) or question_stance (a clear take, then a question). Follow it. Offer and last slots keep their call to action and need no question.
+- For every X slot also write exactly 2 more versions of the same idea in variations. Each version uses a different layout from the one in content and from the other version, keeps the same closing, facts and length limit, and keeps {{link}} when the role is offer or last. Slots of any other platform get an empty variations array.
 Write in the voice described, plain British English. Return exactly one entry per slot, with the slot number it was given.`,
       JSON.stringify({ brief, slots }),
       'medium'
@@ -505,7 +529,9 @@ Rules:
 - Keep the idea that made the original work, but never copy its phrases or sentences and never mention its author.
 - Keep facts generic: no numbers, results, names or claims that are not in the original post or that you cannot be sure of.
 - No hashtags, unless the style guide says the creator uses them.
-${COPY_CRAFT}`,
+- The 3 drafts use 3 different layouts, and about half of them close with a question.
+${COPY_CRAFT}
+${X_STYLE}`,
       tweet,
       'medium'
     );
@@ -551,7 +577,9 @@ Rules:
 - Never copy distinctive phrases or sentences of the source and never mention its author.
 - No numbers, results, names or claims beyond what the source says.
 - No hashtags, unless the source uses them.
-${COPY_CRAFT}`;
+- Use different layouts across the variations, and close about half of them with a question.
+${COPY_CRAFT}
+${X_STYLE}`;
 
     const content = tweets
       .map(
@@ -701,7 +729,7 @@ Rules:
 - Write confidently and simply, with no hedging.
 - No numbers, results, names or claims you cannot be sure of.
 - No hashtags, unless the style guide says the creator uses them.
-${COPY_CRAFT}`,
+${COPY_CRAFT}${/^(x|twitter)$/i.test(options.platform) ? `\n${X_STYLE}` : ''}`,
       `<source format="${entry.formatTag || 'unknown'}">
 ${entry.content}
 </source>

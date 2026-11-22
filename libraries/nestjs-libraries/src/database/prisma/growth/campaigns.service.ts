@@ -228,6 +228,13 @@ export class CampaignsService {
           'Results post without the risk line (risk of loss and educational, not financial advice)',
       });
     }
+    if (/\[NEED:/i.test(text)) {
+      flags.push({
+        code: 'needs_story',
+        severity: 'high',
+        message: 'Replace the [NEED: ...] placeholder with your real story',
+      });
+    }
     if (/\{\{link\}\}/.test(text)) {
       flags.push({
         code: 'link_token',
@@ -301,6 +308,9 @@ export class CampaignsService {
           pillar: post.pillar,
           mediaIdea: post.mediaIdea,
           content: post.content,
+          variations: Array.isArray(post.variations)
+            ? (post.variations as string[])
+            : [],
           status: post.status,
           postId: post.postId,
           note: post.note,
@@ -399,16 +409,34 @@ export class CampaignsService {
       voice: voice?.styleGuide || undefined,
       profile,
     };
+    // About half of the X posts close on a question: statement, pure question,
+    // statement, question with a stance. Offer and last posts keep their call
+    // to action.
+    const closings = ['statement', 'question_pure', 'statement', 'question_stance'];
+    const closingCount: Record<string, number> = {};
     const aiSlots = skeleton.map(
-      ({ slot, platform, maxLength, needsMedia, day, role, pillar }) => ({
-        slot,
-        platform,
-        maxLength,
-        needsMedia,
-        day,
-        role,
-        pillar,
-      })
+      ({ slot, platform, maxLength, needsMedia, day, role, pillar, integrationId }) => {
+        let closing: string | undefined;
+        if (platform === 'x') {
+          if (['offer', 'last'].includes(role)) {
+            closing = 'cta';
+          } else {
+            const index = closingCount[integrationId] || 0;
+            closingCount[integrationId] = index + 1;
+            closing = closings[index % closings.length];
+          }
+        }
+        return {
+          slot,
+          platform,
+          maxLength,
+          needsMedia,
+          day,
+          role,
+          pillar,
+          ...(closing ? { closing } : {}),
+        };
+      }
     );
     const batches: CampaignSlot[][] = [];
     for (let index = 0; index < aiSlots.length; index += DRAFT_BATCH) {
@@ -446,20 +474,30 @@ export class CampaignsService {
         utm_medium: 'social',
         utm_campaign: slug,
       });
-      let content = written.content.trim();
-      if (withLink) {
-        content = content.includes('{{link}}')
-          ? content.replace(/\{\{link\}\}/g, link)
-          : `${content}\n${link}`;
-      } else {
-        content = content.replace(/\{\{link\}\}/g, '').trim();
-      }
+      const fill = (text: string) => {
+        let filled = text.trim();
+        if (withLink) {
+          filled = filled.includes('{{link}}')
+            ? filled.replace(/\{\{link\}\}/g, link)
+            : `${filled}\n${link}`;
+        } else {
+          filled = filled.replace(/\{\{link\}\}/g, '').trim();
+        }
+        return filled;
+      };
+      const content = fill(written.content);
+      // the other layouts of an X post, the chosen one is content
+      const versions = [
+        content,
+        ...(written.variations || []).map(fill).filter((p) => p),
+      ].filter((p, index, all) => all.indexOf(p) === index);
       return {
         integrationId: item.integrationId,
         publishAt: item.date,
         pillar: item.pillar,
         mediaIdea: item.needsMedia ? written.mediaIdea.trim() || null : null,
         content,
+        ...(versions.length > 1 ? { variations: versions } : {}),
         sortOrder: item.slot,
       };
     });

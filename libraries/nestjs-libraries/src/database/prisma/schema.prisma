@@ -2516,6 +2516,8 @@ model CampaignPost {
   // what the picture or video should show, for channels that need media
   mediaIdea      String?
   content        String
+  // every version of the post in different layouts (JSON array of strings, content is the chosen one), X only
+  variations     Json?
   status         String       @default("DRAFT")
   // the Postiz post created when it was approved
   postId         String?
