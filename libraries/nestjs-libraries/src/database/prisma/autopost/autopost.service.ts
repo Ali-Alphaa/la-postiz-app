@@ -19,6 +19,7 @@ import { TypedSearchAttributes } from '@temporalio/common';
 import {
   organizationId,
 } from '@gitroom/nestjs-libraries/temporal/temporal.search.attribute';
+import { getSsrfSafeDispatcher } from '@gitroom/nestjs-libraries/dtos/webhooks/ssrf.safe.dispatcher';
 const parser = new Parser();
 
 interface WorkflowChannelsState {
@@ -139,7 +140,36 @@ export class AutopostService {
 
   async loadXML(url: string) {
     try {
-      const { items } = await parser.parseURL(url);
+      // fetched through the SSRF guard (every redirect hop is checked), only
+      // the parsing is left to rss-parser
+      const response = await fetch(url, {
+        // @ts-ignore — undici option, not in lib.dom fetch types
+        dispatcher: getSsrfSafeDispatcher(),
+        signal: AbortSignal.timeout(60000),
+        // same headers rss-parser's parseURL sent, some feed hosts need them
+        headers: {
+          'User-Agent': 'rss-parser',
+          Accept: 'application/rss+xml',
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Status code ' + response.status);
+      }
+
+      // response.text() is always utf-8, parseURL honoured the feed's charset
+      const charset = /charset\s*=\s*"?([^\s;"]+)/i.exec(
+        response.headers.get('content-type') || ''
+      )?.[1];
+      let decoder: TextDecoder;
+      try {
+        decoder = new TextDecoder(charset || 'utf-8');
+      } catch (err) {
+        decoder = new TextDecoder('utf-8');
+      }
+
+      const { items } = await parser.parseString(
+        decoder.decode(await response.arrayBuffer())
+      );
       const findLast = items.reduce(
         (all: any, current: any) => {
           if (dayjs(current.pubDate).isAfter(all.pubDate)) {
@@ -189,7 +219,11 @@ export class AutopostService {
 
   async loadUrl(url: string) {
     try {
-      const loadDom = new JSDOM(await (await fetch(url)).text());
+      const response = await fetch(url, {
+        // @ts-ignore — undici option, not in lib.dom fetch types
+        dispatcher: getSsrfSafeDispatcher(),
+      });
+      const loadDom = new JSDOM(await response.text());
       loadDom.window.document
         .querySelectorAll('script')
         .forEach((s) => s.remove());
